@@ -111,7 +111,8 @@ run :: proc(pty: ^pty_t){
     buf : [256]byte
     
     ev : sdl3.Event
-
+    
+    written := false
 
     for running{
 
@@ -124,21 +125,58 @@ run :: proc(pty: ^pty_t){
         }
         posix.FD_ZERO(&readable)
         posix.FD_SET(pty.primary, &readable)
-
+        str : cstring
+        n : c.ssize_t
         if posix.select(cast(c.int)pty.primary + 1, &readable, nil, nil,&timeout) > 0{
-            n : c.ssize_t = posix.read(pty.primary, &buf[0], len(buf)- 1 )
+            n = posix.read(pty.primary, &buf[0], len(buf)- 1 )
             if n > 0 {
                 buf[n] = 0
-                str := string(buf[0:n])
+                str = cstring(&buf[0])
                 fmt.println(str)
             }
         }
-
-
+        
+        
         //write shell output to screen
-         
+            // Define font and size
+        font_path := cstring("/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf")
+        font_size := 24
+        font := ttf.OpenFont(font_path, cast(f32)font_size)
+        if font == nil {
+            fmt.println("Failed to load font:", sdl3.GetError())
+            return
+        }
+
+        // Define color for the text
+        color := sdl3.Color{ 255, 255, 255, 255 } // white
+
+               // Render text to a surface
+               text_surface := ttf.RenderText_Solid(font, str, uint(n), color)
+               if text_surface == nil {
+                   fmt.println("Failed to create text surface:", sdl3.GetError())
+                   return
+               }
+
+               // Blit the text surface onto the main surface (or your window surface)
+               sdl3.BlitSurface(text_surface, nil, surface, nil)
+
+               // Update the window to reflect changes
+               sdl3.UpdateWindowSurface(window)
+
         //ms
-        sdl3.Delay(50);
+        for running{
+            for sdl3.PollEvent(&ev){
+                #partial switch ev.type {
+                case sdl3.EventType.QUIT:
+                    running = false
+
+                case sdl3.EventType.KEY_DOWN:
+                    fmt.println(rune(ev.key.key))
+                }
+            }
+            //ms
+            sdl3.Delay(50);
+        }
     }
 }
 
@@ -179,6 +217,13 @@ main :: proc () {
     }
     defer sdl3.Quit()
 
+
+    if ! ttf.Init() {
+        fmt.println("ttf init error", sdl3.GetError())
+        return
+    }
+    defer ttf.Quit()
+
     flags := sdl3.WINDOW_RESIZABLE | sdl3.WINDOW_BORDERLESS
     window = sdl3.CreateWindow("test-term", width, height, flags)
     defer{ 
@@ -205,8 +250,6 @@ main :: proc () {
     color := sdl3.Color({r,g,b,a})
     //sdl3.FillSurfaceRect(surface,color)
     sdl3.UpdateWindowSurface(window)
-
-    sdl3.Delay(5000)
 
     run(&pty)
 }

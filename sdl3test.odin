@@ -12,6 +12,9 @@ when ODIN_OS == .Linux do foreign import testc "lib/test.a"
 TIOCSWINSZ :: 0x5414
 TIOCSCTTY :: 0x540E
 
+width :: 500
+height :: 500
+
 winsize_t ::struct {
     row : u16,
     col : u16,
@@ -108,13 +111,30 @@ spawn :: proc(pty : ^pty_t) -> bool{
 run :: proc(pty: ^pty_t){
 
     running := true
-    buf : [256]byte
     
     ev : sdl3.Event
     
     written := false
+    
+    w : i32
+    h : i32
+
+
+    fmt.println(sdl3.GetWindowSize(window,&w,&h))
+    fmt.println(w," ",h,)
+    str : cstring
+    n : c.ssize_t
+    
+    resized := false
 
     for running{
+        if ! resized{
+            surface = sdl3.GetWindowSurface(window)
+            fmt.println("resized")
+            resized = true
+        }
+
+        buf : [256]byte
 
         // read shell output to buffer
         readable : posix.fd_set
@@ -125,8 +145,6 @@ run :: proc(pty: ^pty_t){
         }
         posix.FD_ZERO(&readable)
         posix.FD_SET(pty.primary, &readable)
-        str : cstring
-        n : c.ssize_t
         if posix.select(cast(c.int)pty.primary + 1, &readable, nil, nil,&timeout) > 0{
             n = posix.read(pty.primary, &buf[0], len(buf)- 1 )
             if n > 0 {
@@ -139,44 +157,47 @@ run :: proc(pty: ^pty_t){
         
         //write shell output to screen
             // Define font and size
-        font_path := cstring("/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf")
-        font_size := 24
-        font := ttf.OpenFont(font_path, cast(f32)font_size)
-        if font == nil {
-            fmt.println("Failed to load font:", sdl3.GetError())
-            return
+        if str != nil {
+            font_path := cstring("/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf")
+            font_size := 12
+            font := ttf.OpenFont(font_path, cast(f32)font_size)
+            if font == nil {
+                fmt.println("Failed to load font:", sdl3.GetError())
+                return
+            }
+
+            // Define color for the text
+            color := sdl3.Color{ 255, 255, 255, 255 } // white
+
+                   // Render text to a surface
+                   text_surface := ttf.RenderText_Solid(font, str, uint(n), color)
+                   if text_surface == nil {
+                       fmt.println("Failed to create text surface:", sdl3.GetError())
+                       return
+                   }
+
+                   // Blit the text surface onto the main surface (or your window surface)
+                   sdl3.BlitSurface(text_surface, nil, surface, nil)
+
+                   // Update the window to reflect changes
         }
+        sdl3.UpdateWindowSurface(window)
 
-        // Define color for the text
-        color := sdl3.Color{ 255, 255, 255, 255 } // white
-
-               // Render text to a surface
-               text_surface := ttf.RenderText_Solid(font, str, uint(n), color)
-               if text_surface == nil {
-                   fmt.println("Failed to create text surface:", sdl3.GetError())
-                   return
-               }
-
-               // Blit the text surface onto the main surface (or your window surface)
-               sdl3.BlitSurface(text_surface, nil, surface, nil)
-
-               // Update the window to reflect changes
-               sdl3.UpdateWindowSurface(window)
-
-        //ms
-        for running{
+                   //ms
             for sdl3.PollEvent(&ev){
                 #partial switch ev.type {
+                case sdl3.EventType.WINDOW_RESIZED:
+                    fmt.println("Updated")
+                    //surface = sdl3.GetWindowSurface(window)
+                    sdl3.UpdateWindowSurface(window)
                 case sdl3.EventType.QUIT:
                     running = false
-
                 case sdl3.EventType.KEY_DOWN:
                     fmt.println(rune(ev.key.key))
                 }
             }
             //ms
             sdl3.Delay(50);
-        }
     }
 }
 
@@ -203,8 +224,6 @@ main :: proc () {
         return
     }
     fmt.println("worked!")
-    width :: 500
-    height :: 500
     ws : winsize_t = {
         row = width,
         col = height,
@@ -238,10 +257,6 @@ main :: proc () {
     if surface == nil {
         fmt.println(sdl3.GetError())
         return
-    }
-    defer{ 
-        sdl3.DestroySurface(surface)
-        surface = nil
     }
     r : u8 = 0
     g : u8 = 0

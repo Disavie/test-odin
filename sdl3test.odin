@@ -1,6 +1,7 @@
 package sdl3test
 
 import "vendor:sdl3"
+import ttf "vendor:sdl3/ttf"
 import "core:fmt"
 import posix "core:sys/posix"
 import linux "core:sys/linux"
@@ -18,19 +19,18 @@ winsize_t ::struct {
     ypixel : u16,
 }
 
-sdl_t :: struct {
-    win : ^sdl3.Window,
-    surface : ^sdl3.Surface,
-    event : sdl3.Event
-}
 
+pty_t :: struct {
+    primary, secondary : posix.FD
+}
 foreign testc{
     myfunction :: proc() ---
     use_ioctl:: proc(fd : ^c.int, flags : int, wz : ^winsize_t) -> c.int --- 
 }
 
-pty_t :: struct {
-    primary, secondary : posix.FD
+setup_sdl3 :: proc() -> bool {
+
+    return true
 }
 
 setup_pty :: proc(pty: ^pty_t) -> bool {
@@ -63,6 +63,7 @@ setup_pty :: proc(pty: ^pty_t) -> bool {
         fmt.println("open error")
         return false
     }
+
     return true
 }
 
@@ -93,7 +94,7 @@ spawn :: proc(pty : ^pty_t) -> bool{
         )
         return false;
     }else if p > 0 {
-        //parent
+        //parent 
         posix.close(pty.secondary)
         return true
     }
@@ -101,35 +102,50 @@ spawn :: proc(pty : ^pty_t) -> bool{
     return false
 }
 
-read_shell :: proc(){
-    buffer := [256]rune
-
-}
 
 
-run :: proc(pty: ^pty_t, sdl : ^sdl_t){
+
+run :: proc(pty: ^pty_t){
 
     running := true
-    ev := sdl.event
+    buf : [256]byte
+    
+    ev : sdl3.Event
 
 
     for running{
-        for sdl3.PollEvent(&ev){
-            #partial switch ev.type {
-            case sdl3.EventType.QUIT:
-                running = false
 
-            case sdl3.EventType.KEY_DOWN:
-                fmt.println(rune(ev.key.key))
+        // read shell output to buffer
+        readable : posix.fd_set
+
+        timeout : posix.timeval = {
+            tv_sec = 0,
+            tv_usec = 10000, // 10 ms timeout
+        }
+        posix.FD_ZERO(&readable)
+        posix.FD_SET(pty.primary, &readable)
+
+        if posix.select(cast(c.int)pty.primary + 1, &readable, nil, nil,&timeout) > 0{
+            n : c.ssize_t = posix.read(pty.primary, &buf[0], len(buf)- 1 )
+            if n > 0 {
+                buf[n] = 0
+                str := string(buf[0:n])
+                fmt.println(str)
             }
         }
+
+
+        //write shell output to screen
+         
         //ms
         sdl3.Delay(50);
     }
 }
 
+window : ^sdl3.Window = nil
+surface : ^sdl3.Surface = nil
+
 main :: proc () {
-    fmt.println("hello sdl3")
     // setup pty
 
     pty : pty_t = {
@@ -137,6 +153,7 @@ main :: proc () {
         secondary = -1,
     }
     check : bool
+
     check = setup_pty(&pty)
     if ! check {
         fmt.println("brah")
@@ -148,43 +165,48 @@ main :: proc () {
         return
     }
     fmt.println("worked!")
+    width :: 500
+    height :: 500
     ws : winsize_t = {
-        row = 100,
-        col = 100,
+        row = width,
+        col = height,
     }
     result := use_ioctl(cast(^i32)&pty.primary, TIOCSWINSZ, &ws)
-    sdl : sdl_t = {}
     
-    // setup sdl3 
-    win: ^sdl3.Window = sdl3.CreateWindow("sdl3test", cast(i32)ws.row, cast(i32)ws.col, 
-        sdl3.WINDOW_BORDERLESS | sdl3.WINDOW_RESIZABLE
-        )
-    if win == nil {
-        fmt.println("Failed to create window")
+    if ! sdl3.Init(sdl3.INIT_VIDEO) {
+        fmt.println("sdl3 init error", sdl3.GetError())
+        return
+    }
+    defer sdl3.Quit()
+
+    flags := sdl3.WINDOW_RESIZABLE | sdl3.WINDOW_BORDERLESS
+    window = sdl3.CreateWindow("test-term", width, height, flags)
+    defer{ 
+        sdl3.DestroyWindow(window)
+        window = nil
+    }
+    if window == nil{
         fmt.println(sdl3.GetError())
         return
     }
-    defer {
-        sdl3.DestroyWindow(win)
-        win = nil
+    surface = sdl3.GetWindowSurface( window )
+    if surface == nil {
+        fmt.println(sdl3.GetError())
+        return
     }
-    sdl.win = win
-    surface : ^sdl3.Surface = sdl3.GetWindowSurface(win)
-    sdl.surface = surface
-
-    sdl3.UpdateWindowSurface(win)
+    defer{ 
+        sdl3.DestroySurface(surface)
+        surface = nil
+    }
     r : u8 = 0
     g : u8 = 0
-    b : u8 = 0
-    color := sdl3.MapSurfaceRGB(surface, r,g,b)
-    sdl3.FillSurfaceRect(surface,nil,color)
-    sdl3.UpdateWindowSurface(win)
+    b:  u8 = 0
+    a:  u8 = 255
+    color := sdl3.Color({r,g,b,a})
+    //sdl3.FillSurfaceRect(surface,color)
+    sdl3.UpdateWindowSurface(window)
 
-    ev : sdl3.Event
-    sdl.event = ev
+    sdl3.Delay(5000)
 
-    run(&pty, &sdl)
-
-    surface = nil
-    sdl3.Quit()
+    run(&pty)
 }

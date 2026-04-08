@@ -4,8 +4,6 @@
 #include <unistd.h>
 #include <termios.h>
 
-const int TIOCSWINSZ = TIOCSWINSZ
-
 int setup_pty(int  * primary_fd, int * secondary_fd, struct termios * term, struct winsize * win){
 
     int pid = openpty(primary_fd, secondary_fd, NULL, term, win);
@@ -19,7 +17,7 @@ int setup_pty(int  * primary_fd, int * secondary_fd, struct termios * term, stru
 
     }
 }
-int use_ioctl(int * fd , int flags, winsize * ws){
+int use_ioctl(int * fd , int flags, struct winsize * ws){
     if ( ws == NULL ){
         return ioctl(*fd, flags, NULL);
     }

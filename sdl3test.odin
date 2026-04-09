@@ -20,7 +20,34 @@ TIOCSWINSZ :: 0x5414
 
 width :: 500
 height :: 500
+shift_map: [128]byte;
 
+shifted :: proc(ch: u8) -> u8 {
+    switch ch {
+    case '1': return '!'
+    case '2': return '@'
+    case '3': return '#'
+    case '4': return '$'
+    case '5': return '%'
+    case '6': return '^'
+    case '7': return '&'
+    case '8': return '*'
+    case '9': return '('
+    case '0': return ')'
+    case '-': return '_'
+    case '=': return '+'
+    case '[': return '{'
+    case ']': return '}'
+    case '\\': return '|'
+    case ';': return ':'
+    case '\'': return '"'
+    case ',': return '<'
+    case '.': return '>'
+    case '/': return '?'
+    case '`': return '~'
+    }
+    return 0
+}
 winsize_t ::struct {
     row : u16,
     col : u16,
@@ -192,17 +219,30 @@ run :: proc(pty: ^pty_t){
                     sdl3.UpdateWindowSurface(window)
                 case sdl3.EventType.QUIT:
                     running = false
-                case sdl3.EventType.TEXT_INPUT:
-                    cstr := ev.text.text 
-                    fmt.println(cstr)
+                case sdl3.EventType.KEY_DOWN:
 
-                    str := strings.clone_from_cstring(cstr)
-                    tmp : [256]byte 
-                    for i in 0..<len(str){
-                        tmp[i] = cast(u8)str[i]
+                    key := ev.key.key
+                    mod := ev.key.mod
+
+                    ch := cast(u8)key
+                    hold := false
+
+                    if sdl3.Keymod.LSHIFT in mod || sdl3.Keymod.RSHIFT in mod{
+                        if ch >= u8('a') && ch <= u8('A') {
+                            ch -= u8('a' - 'A')
+                        } else {
+                            ch = shifted(ch)
+                        }if ch == 0{
+                            hold = true
+                        }
                     }
-                    tmp[len(str)] = 0
-                    posix.write(pty.primary,&tmp[0] , len(ev.text.text))
+
+                    if sdl3.Keymod.RCTRL in mod || sdl3.Keymod.LCTRL in mod{
+                        ch &= 0x1F
+                    }
+                    if ! hold {
+                        posix.write(pty.primary,&ch ,1)
+                    }
 
                 }
             }

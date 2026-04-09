@@ -90,6 +90,9 @@ run :: proc(pty: ^pty_t){
     str : cstring
     n : c.ssize_t
     readable : posix.fd_set
+
+    ww, wh : c.int
+
     
     resized := false
     redraw := false
@@ -105,6 +108,7 @@ run :: proc(pty: ^pty_t){
 
     surface = sdl3.GetWindowSurface(window)
     sdl3.UpdateWindowSurface(window)
+    sdl3.GetWindowSize(window,&ww,&wh)
 
     // Define color for the text
     color := sdl3.Color{ 255, 255, 255, 255 } // white
@@ -138,6 +142,15 @@ run :: proc(pty: ^pty_t){
         //write shell output to screen
         // Define font and size
         if redraw == true {
+            fmt.println(y, " ", wh)
+            if y + cast(i32)font_size >= wh {
+                //reset screen if at the bottom
+                y = 0
+                surface = sdl3.GetWindowSurface(window)
+                sdl3.FillSurfaceRect(surface, nil, 0)
+                sdl3.UpdateWindowSurface(window)
+            }
+
             for i in 0..<n {
                 ch := buf[i]
 
@@ -169,7 +182,9 @@ run :: proc(pty: ^pty_t){
                 case sdl3.EventType.WINDOW_RESIZED:
                     fmt.println("Updated")
                     //if resized i need to get a new surface
+                    sdl3.DestroySurface(surface)
                     surface = sdl3.GetWindowSurface(window)
+                    sdl3.GetWindowSize(window,&wh,&wh)
                     sdl3.UpdateWindowSurface(window)
                 case sdl3.EventType.QUIT:
                     running = false

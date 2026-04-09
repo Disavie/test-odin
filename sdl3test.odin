@@ -9,19 +9,18 @@ import "core:c"
 import "core:strings"
 import  shift_map "map"
 
-when ODIN_OS == .Linux do foreign import pty "system:libutil.a"
 when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
+when ODIN_OS == .Linux do foreign import pty "system:libutil.a"
 foreign pty {openpty :: proc(primary, secondary : ^c.int, name : [^]byte, term : ^posix.termios, ws : ^winsize_t) -> c.int ---}
 
 SHELL :: cstring("/bin/sh")
-SHELL_PROFILE :: cstring("-sh")
+SHELL_PROFILE :: cstring("-bash")
 
 TIOCSCTTY :: 0x540E
 TIOCSWINSZ :: 0x5414
 
 width :: 500
 height :: 500
-shift_map: [128]byte;
 
 winsize_t ::struct {
     row : u16,
@@ -108,6 +107,8 @@ run :: proc(pty: ^pty_t){
         return
     }
 
+    glyphs: map[u8]^sdl3.Surface
+
 
     surface = sdl3.GetWindowSurface(window)
     sdl3.UpdateWindowSurface(window)
@@ -133,8 +134,6 @@ run :: proc(pty: ^pty_t){
                 redraw = true
                 buf[n] = 0
                 str = cstring(&buf[0])
-                //debug
-                //fmt.print(str)
             }else{
                 fmt.println("shell closed")
                 return
@@ -150,7 +149,6 @@ run :: proc(pty: ^pty_t){
                 y = 0
                 surface = sdl3.GetWindowSurface(window)
                 sdl3.FillSurfaceRect(surface, nil, 0)
-                sdl3.UpdateWindowSurface(window)
             }
 
             if x >= ww {
@@ -172,14 +170,18 @@ run :: proc(pty: ^pty_t){
 
                 text_surface := ttf.RenderText_Solid(font, cstring(&tmp[0]), 1, color)
 
+                if glyphs[ch] == nil {
+                    tmp := [2]byte{ ch, 0 }
+                    glyphs[ch] = ttf.RenderText_Solid(font, cstring(&tmp[0]), 1, color)
+                }
+
                 dest_rect := sdl3.Rect{ x = x, y = y, w = text_surface.w, h = text_surface.h }
-                sdl3.BlitSurface(text_surface, nil, surface, &dest_rect)
+                sdl3.BlitSurface(glyphs[ch], nil, surface, &dest_rect)
 
                 x += dest_rect.w
 
-                sdl3.UpdateWindowSurface(window)
-                sdl3.DestroySurface(text_surface)
             }
+            sdl3.UpdateWindowSurface(window)
         }
 
                    //ms
@@ -225,7 +227,7 @@ run :: proc(pty: ^pty_t){
             }
             //ms
             redraw = false
-            sdl3.Delay(50);
+            sdl3.Delay(5);
     }
 }
 

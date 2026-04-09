@@ -8,8 +8,12 @@ import linux "core:sys/linux"
 import "core:c"
 import "core:os"
 import "core:time"
-when ODIN_OS == .Linux do foreign import testc "lib/test.a"
+when ODIN_OS == .Linux do foreign import pty "system:libutil.a"
+when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
+foreign pty {openpty :: proc(primary, secondary : ^c.int, name : [^]byte, term : ^posix.termios, ws : ^winsize_t) -> c.int ---}
 
+SHELL :: cstring("/bin/sh")
+SHELL_PROFILE :: cstring("-sh")
 TIOCSWINSZ :: 0x5414
 TIOCSCTTY :: 0x540E
 
@@ -27,62 +31,20 @@ winsize_t ::struct {
 pty_t :: struct {
     primary, secondary : posix.FD
 }
-foreign testc{
-    myfunction :: proc() ---
-    use_ioctl:: proc(fd : ^c.int, flags : int, wz : ^winsize_t) -> c.int --- 
-    setup_pty :: proc(primary, secondary : ^c.int, name : [^]byte, term : ^posix.termios, ws : ^winsize_t) -> c.int ---
-}
-
-setup_sdl3 :: proc() -> bool {
-
-    return true
-}
-
-setup_pty2 :: proc(pty: ^pty_t) -> bool {
-
-    flags := posix.O_Flags{.RDWR, .NOCTTY}
-
-    pty.primary = posix.posix_openpt(flags)
-    if pty.primary == -1 {
-        fmt.println("posix_openpt error")
-        return false
-    }
-    if posix.grantpt(pty.primary) == posix.result.FAIL{
-        fmt.println("grantpt error")
-        return false
-    }
-    if posix.unlockpt(pty.primary) == posix.result.FAIL {
-        fmt.println("unlock error")
-        return false
-    }
 
 
-    secondary_name := posix.ptsname(pty.primary)
-    fmt.println(secondary_name)
-    if secondary_name == nil {
-        fmt.println("ptsname error")
-        return false
-    }
-
-    pty.secondary = posix.open(secondary_name,flags)
-    if pty.secondary == -1{
-        fmt.println("open error")
-        return false
-    }
-
-    return true
-}
 
 spawn :: proc(pty : ^pty_t) -> bool{
     p : posix.pid_t
 
     p = posix.fork()
+    env : []cstring = { "TERM=dumb", nil}
 
     if p == 0 {
         //child
         posix.close(pty.primary)
         posix.setsid()
-        use_ioctl(cast(^i32)&pty.secondary, TIOCSCTTY, nil)
+        linux.ioctl(cast(linux.Fd)pty.secondary, TIOCSCTTY, 0)
 
 
         posix.dup2(pty.secondary, 0)
@@ -91,12 +53,15 @@ spawn :: proc(pty : ^pty_t) -> bool{
 
         posix.close(pty.secondary)
         arg0 := cstring("/bin/sh")
-
+        // arg0 "-" will use the default login profile
+        // arg0 "-sh" uses the sh login profile
+        // arg0 "-bash" uses the bash login profile... etc
+        // arg0 "sh" will just open sh and not load a login profle
         posix.execle(
-            "/bin/sh",
-            "-sh",
-            nil,
-            posix.environ,
+            SHELL,
+            SHELL_PROFILE, 
+            cast(^rune)nil,
+            env,
         )
         return false;
     }else if p > 0 {
@@ -219,11 +184,12 @@ main :: proc () {
     term : posix.termios = {}
     secondary_name : [64]byte
 
-    i:= setup_pty(cast(^i32)&pty.primary, cast(^i32)&pty.secondary, &secondary_name[0], nil, nil)
-    if ! check {
+    i:= openpty(cast(^i32)&pty.primary, cast(^i32)&pty.secondary, &secondary_name[0], nil, nil)
+    if  i == 1 {
         fmt.println("brah")
         return
     }
+
     n : int
     for i in 0..=64 {
         if secondary_name[i] == 0{
@@ -231,22 +197,16 @@ main :: proc () {
             break
         }
     }
+
     fmt.println(string(secondary_name[:n]))
-    fmt.println(i)
-
-
 
     check = spawn(&pty)
     if ! check {
         fmt.println("brah")
         return
     }
-    fmt.println("worked!")
-    ws : winsize_t = {
-        row = width,
-        col = height,
-    }
-    result := use_ioctl(cast(^i32)&pty.primary, TIOCSWINSZ, &ws)
+
+    result := linux.ioctl(cast(linux.Fd)pty.primary, TIOCSWINSZ, 0)
     
     if ! sdl3.Init(sdl3.INIT_VIDEO) {
         fmt.println("sdl3 init error", sdl3.GetError())
@@ -281,7 +241,6 @@ main :: proc () {
     b:  u8 = 0
     a:  u8 = 255
     color := sdl3.Color({r,g,b,a})
-    //sdl3.FillSurfaceRect(surface,color)
     sdl3.UpdateWindowSurface(window)
 
     run(&pty)

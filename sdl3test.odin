@@ -6,7 +6,7 @@ import "core:fmt"
 import posix "core:sys/posix"
 import linux "core:sys/linux"
 import "core:c"
-import charmap "map"
+import "core:strings"
 
 when ODIN_OS == .Linux do foreign import pty "system:libutil.a"
 when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
@@ -192,29 +192,17 @@ run :: proc(pty: ^pty_t){
                     sdl3.UpdateWindowSurface(window)
                 case sdl3.EventType.QUIT:
                     running = false
-                    /*
-                case sdl3.EventType.KEY_DOWN:
-
-//                    fmt.println(rune(ev.key.key))
-                    key := ev.key.key
-                    mod := ev.key.mod
-
-                    ch := cast(u8)key
-                    hold := false
-
-                    if sdl3.Keymod.LSHIFT in mod || sdl3.Keymod.RSHIFT in mod{
-                        // do this part, converting a -> A or symbols 1 -> ! etc..
-                    }
-
-                    if sdl3.Keymod.RCTRL in mod || sdl3.Keymod.LCTRL in mod{
-                        ch &= 0x1F
-                    }
-                    if ! hold {
-                        posix.write(pty.primary,&ch ,1)
-                    }
-                    */
                 case sdl3.EventType.TEXT_INPUT:
-                    posix.write(pty.primary, &ev.text.text, len(ev.text.text))
+                    cstr := ev.text.text 
+                    fmt.println(cstr)
+
+                    str := strings.clone_from_cstring(cstr)
+                    tmp : [256]byte 
+                    for i in 0..<len(str){
+                        tmp[i] = cast(u8)str[i]
+                    }
+                    tmp[len(str)] = 0
+                    posix.write(pty.primary,&tmp[0] , len(ev.text.text))
 
                 }
             }

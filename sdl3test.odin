@@ -7,6 +7,7 @@ import posix "core:sys/posix"
 import linux "core:sys/linux"
 import "core:c"
 import "core:strings"
+import  shift_map "map"
 
 when ODIN_OS == .Linux do foreign import pty "system:libutil.a"
 when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
@@ -22,32 +23,6 @@ width :: 500
 height :: 500
 shift_map: [128]byte;
 
-shifted :: proc(ch: u8) -> u8 {
-    switch ch {
-    case '1': return '!'
-    case '2': return '@'
-    case '3': return '#'
-    case '4': return '$'
-    case '5': return '%'
-    case '6': return '^'
-    case '7': return '&'
-    case '8': return '*'
-    case '9': return '('
-    case '0': return ')'
-    case '-': return '_'
-    case '=': return '+'
-    case '[': return '{'
-    case ']': return '}'
-    case '\\': return '|'
-    case ';': return ':'
-    case '\'': return '"'
-    case ',': return '<'
-    case '.': return '>'
-    case '/': return '?'
-    case '`': return '~'
-    }
-    return 0
-}
 winsize_t ::struct {
     row : u16,
     col : u16,
@@ -228,10 +203,12 @@ run :: proc(pty: ^pty_t){
                     hold := false
 
                     if sdl3.Keymod.LSHIFT in mod || sdl3.Keymod.RSHIFT in mod{
-                        if ch >= u8('a') && ch <= u8('A') {
+                        if ch >= u8('a') && ch <= u8('z') {
                             ch -= u8('a' - 'A')
+                            fmt.println(rune(ch))
+
                         } else {
-                            ch = shifted(ch)
+                            ch = shift_map.shifted(ch)
                         }if ch == 0{
                             hold = true
                         }

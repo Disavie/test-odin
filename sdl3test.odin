@@ -84,87 +84,99 @@ run :: proc(pty: ^pty_t){
     
     written := false
     
-    w : i32
-    h : i32
+    x : i32 = 0
+    y : i32 = 0
 
-
-    fmt.println(sdl3.GetWindowSize(window,&w,&h))
-    fmt.println(w," ",h,)
     str : cstring
     n : c.ssize_t
+    readable : posix.fd_set
     
     resized := false
+    redraw := false
+
+    font_path := cstring("/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf")
+    font_size := 12
+    font := ttf.OpenFont(font_path, cast(f32)font_size)
+    if font == nil {
+        fmt.println("Failed to load font:", sdl3.GetError())
+        return
+    }
+
+
+    surface = sdl3.GetWindowSurface(window)
+    sdl3.UpdateWindowSurface(window)
+
+    // Define color for the text
+    color := sdl3.Color{ 255, 255, 255, 255 } // white
 
     for running{
-        if ! resized{
-            surface = sdl3.GetWindowSurface(window)
-            fmt.println("resized")
-            resized = true
-        }
 
         buf : [256]byte
 
         // read shell output to buffer
-        readable : posix.fd_set
-
+        posix.FD_ZERO(&readable)
+        posix.FD_SET(pty.primary, &readable)
         timeout : posix.timeval = {
             tv_sec = 0,
             tv_usec = 10000, // 10 ms timeout
         }
-        posix.FD_ZERO(&readable)
-        posix.FD_SET(pty.primary, &readable)
         if posix.select(cast(c.int)pty.primary + 1, &readable, nil, nil,&timeout) > 0{
             n = posix.read(pty.primary, &buf[0], len(buf)- 1 )
             if n > 0 {
+                redraw = true
                 buf[n] = 0
                 str = cstring(&buf[0])
-                fmt.println(str)
+                //debug
+                //fmt.print(str)
             }
         }
         
         
         //write shell output to screen
-            // Define font and size
-        if str != nil {
-            font_path := cstring("/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf")
-            font_size := 12
-            font := ttf.OpenFont(font_path, cast(f32)font_size)
-            if font == nil {
-                fmt.println("Failed to load font:", sdl3.GetError())
-                return
+        // Define font and size
+        if redraw == true {
+            for i in 0..<n {
+                ch := buf[i]
+
+                if ch == '\n' {
+                    y += cast(i32)font_size
+                    x = 0
+                    continue
+                }
+
+                tmp : [2]byte
+                tmp[0] = ch
+                tmp[1] = 0
+
+                text_surface := ttf.RenderText_Solid(font, cstring(&tmp[0]), 1, color)
+
+                dest_rect := sdl3.Rect{ x = x, y = y, w = text_surface.w, h = text_surface.h }
+                sdl3.BlitSurface(text_surface, nil, surface, &dest_rect)
+
+                x += dest_rect.w
+
+                sdl3.UpdateWindowSurface(window)
+                sdl3.DestroySurface(text_surface)
             }
-
-            // Define color for the text
-            color := sdl3.Color{ 255, 255, 255, 255 } // white
-
-                   // Render text to a surface
-                   text_surface := ttf.RenderText_Solid(font, str, uint(n), color)
-                   if text_surface == nil {
-                       fmt.println("Failed to create text surface:", sdl3.GetError())
-                       return
-                   }
-
-                   // Blit the text surface onto the main surface (or your window surface)
-                   sdl3.BlitSurface(text_surface, nil, surface, nil)
-
-                   // Update the window to reflect changes
         }
-        sdl3.UpdateWindowSurface(window)
 
                    //ms
             for sdl3.PollEvent(&ev){
                 #partial switch ev.type {
                 case sdl3.EventType.WINDOW_RESIZED:
                     fmt.println("Updated")
-                    //surface = sdl3.GetWindowSurface(window)
+                    //if resized i need to get a new surface
+                    surface = sdl3.GetWindowSurface(window)
                     sdl3.UpdateWindowSurface(window)
                 case sdl3.EventType.QUIT:
                     running = false
                 case sdl3.EventType.KEY_DOWN:
 //                    fmt.println(rune(ev.key.key))
+                    posix.write(pty.primary,cast(^byte)&ev.key.key,1)
                 }
             }
             //ms
+            redraw = false
             sdl3.Delay(50);
     }
 }

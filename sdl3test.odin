@@ -20,7 +20,34 @@ TIOCSWINSZ :: 0x5414
 
 width :: 500
 height :: 500
+shift_map: [128]byte;
 
+shifted :: proc(ch: u8) -> u8 {
+    switch ch {
+    case '1': return '!'
+    case '2': return '@'
+    case '3': return '#'
+    case '4': return '$'
+    case '5': return '%'
+    case '6': return '^'
+    case '7': return '&'
+    case '8': return '*'
+    case '9': return '('
+    case '0': return ')'
+    case '-': return '_'
+    case '=': return '+'
+    case '[': return '{'
+    case ']': return '}'
+    case '\\': return '|'
+    case ';': return ':'
+    case '\'': return '"'
+    case ',': return '<'
+    case '.': return '>'
+    case '/': return '?'
+    case '`': return '~'
+    }
+    return ch
+}
 winsize_t ::struct {
     row : u16,
     col : u16,
@@ -192,10 +219,8 @@ run :: proc(pty: ^pty_t){
                     sdl3.UpdateWindowSurface(window)
                 case sdl3.EventType.QUIT:
                     running = false
-                    /*
                 case sdl3.EventType.KEY_DOWN:
 
-//                    fmt.println(rune(ev.key.key))
                     key := ev.key.key
                     mod := ev.key.mod
 
@@ -203,7 +228,11 @@ run :: proc(pty: ^pty_t){
                     hold := false
 
                     if sdl3.Keymod.LSHIFT in mod || sdl3.Keymod.RSHIFT in mod{
-                        // do this part, converting a -> A or symbols 1 -> ! etc..
+                        if ch >= u8('a') && ch <= u8('A') {
+                            ch -= u8('a' - 'A')
+                        } else {
+                            ch = shifted(ch)
+                        }
                     }
 
                     if sdl3.Keymod.RCTRL in mod || sdl3.Keymod.LCTRL in mod{
@@ -212,9 +241,6 @@ run :: proc(pty: ^pty_t){
                     if ! hold {
                         posix.write(pty.primary,&ch ,1)
                     }
-                    */
-                case sdl3.EventType.TEXT_INPUT:
-                    posix.write(pty.primary, &ev.text.text, len(ev.text.text))
 
                 }
             }

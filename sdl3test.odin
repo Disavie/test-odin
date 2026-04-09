@@ -196,7 +196,7 @@ run :: proc(pty: ^pty_t){
                 case sdl3.EventType.QUIT:
                     running = false
                 case sdl3.EventType.KEY_DOWN:
-                    fmt.println(rune(ev.key.key))
+//                    fmt.println(rune(ev.key.key))
                 }
             }
             //ms

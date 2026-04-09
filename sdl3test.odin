@@ -6,16 +6,17 @@ import "core:fmt"
 import posix "core:sys/posix"
 import linux "core:sys/linux"
 import "core:c"
-import "core:os"
-import "core:time"
+import charmap "map"
+
 when ODIN_OS == .Linux do foreign import pty "system:libutil.a"
 when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
 foreign pty {openpty :: proc(primary, secondary : ^c.int, name : [^]byte, term : ^posix.termios, ws : ^winsize_t) -> c.int ---}
 
 SHELL :: cstring("/bin/sh")
 SHELL_PROFILE :: cstring("-sh")
-TIOCSWINSZ :: 0x5414
+
 TIOCSCTTY :: 0x540E
+TIOCSWINSZ :: 0x5414
 
 width :: 500
 height :: 500
@@ -142,13 +143,16 @@ run :: proc(pty: ^pty_t){
         //write shell output to screen
         // Define font and size
         if redraw == true {
-            fmt.println(y, " ", wh)
             if y + cast(i32)font_size >= wh {
                 //reset screen if at the bottom
                 y = 0
                 surface = sdl3.GetWindowSurface(window)
                 sdl3.FillSurfaceRect(surface, nil, 0)
                 sdl3.UpdateWindowSurface(window)
+            }
+
+            if x >= ww {
+                y += cast(i32)font_size
             }
 
             for i in 0..<n {
@@ -188,9 +192,30 @@ run :: proc(pty: ^pty_t){
                     sdl3.UpdateWindowSurface(window)
                 case sdl3.EventType.QUIT:
                     running = false
+                    /*
                 case sdl3.EventType.KEY_DOWN:
+
 //                    fmt.println(rune(ev.key.key))
-                    posix.write(pty.primary,cast(^byte)&ev.key.key,1)
+                    key := ev.key.key
+                    mod := ev.key.mod
+
+                    ch := cast(u8)key
+                    hold := false
+
+                    if sdl3.Keymod.LSHIFT in mod || sdl3.Keymod.RSHIFT in mod{
+                        // do this part, converting a -> A or symbols 1 -> ! etc..
+                    }
+
+                    if sdl3.Keymod.RCTRL in mod || sdl3.Keymod.LCTRL in mod{
+                        ch &= 0x1F
+                    }
+                    if ! hold {
+                        posix.write(pty.primary,&ch ,1)
+                    }
+                    */
+                case sdl3.EventType.TEXT_INPUT:
+                    posix.write(pty.primary, &ev.text.text, len(ev.text.text))
+
                 }
             }
             //ms

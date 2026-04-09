@@ -128,6 +128,9 @@ run :: proc(pty: ^pty_t){
                 str = cstring(&buf[0])
                 //debug
                 //fmt.print(str)
+            }else{
+                fmt.println("shell closed")
+                return
             }
         }
         

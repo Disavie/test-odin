@@ -4,18 +4,9 @@
 #include <unistd.h>
 #include <termios.h>
 
-int setup_pty(int  * primary_fd, int * secondary_fd, struct termios * term, struct winsize * win){
+int setup_pty(int  * primary_fd, int * secondary_fd, char * name, struct termios * term, struct winsize * win){
 
-    int pid = openpty(primary_fd, secondary_fd, NULL, term, win);
-    printf("%d", pid);
-    if (pid == -1) {
-        perror("error forking pty");
-        return 1;
-    }
-
-    if (pid == 0) {
-
-    }
+    return openpty(primary_fd, secondary_fd, name, NULL, NULL);
 }
 int use_ioctl(int * fd , int flags, struct winsize * ws){
     if ( ws == NULL ){

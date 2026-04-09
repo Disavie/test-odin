@@ -6,6 +6,7 @@ import "core:fmt"
 import posix "core:sys/posix"
 import linux "core:sys/linux"
 import "core:c"
+import "core:os"
 import "core:time"
 when ODIN_OS == .Linux do foreign import testc "lib/test.a"
 
@@ -29,6 +30,7 @@ pty_t :: struct {
 foreign testc{
     myfunction :: proc() ---
     use_ioctl:: proc(fd : ^c.int, flags : int, wz : ^winsize_t) -> c.int --- 
+    setup_pty :: proc(primary, secondary : ^c.int, name : [^]byte, term : ^posix.termios, ws : ^winsize_t) -> c.int ---
 }
 
 setup_sdl3 :: proc() -> bool {
@@ -36,7 +38,7 @@ setup_sdl3 :: proc() -> bool {
     return true
 }
 
-setup_pty :: proc(pty: ^pty_t) -> bool {
+setup_pty2 :: proc(pty: ^pty_t) -> bool {
 
     flags := posix.O_Flags{.RDWR, .NOCTTY}
 
@@ -56,6 +58,7 @@ setup_pty :: proc(pty: ^pty_t) -> bool {
 
 
     secondary_name := posix.ptsname(pty.primary)
+    fmt.println(secondary_name)
     if secondary_name == nil {
         fmt.println("ptsname error")
         return false
@@ -211,13 +214,28 @@ main :: proc () {
         primary = -1,
         secondary = -1,
     }
-    check : bool
+    check : bool = true
 
-    check = setup_pty(&pty)
+    term : posix.termios = {}
+    secondary_name : [64]byte
+
+    i:= setup_pty(cast(^i32)&pty.primary, cast(^i32)&pty.secondary, &secondary_name[0], nil, nil)
     if ! check {
         fmt.println("brah")
         return
     }
+    n : int
+    for i in 0..=64 {
+        if secondary_name[i] == 0{
+            n = i
+            break
+        }
+    }
+    fmt.println(string(secondary_name[:n]))
+    fmt.println(i)
+
+
+
     check = spawn(&pty)
     if ! check {
         fmt.println("brah")

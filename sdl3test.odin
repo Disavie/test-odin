@@ -18,6 +18,7 @@ SHELL_PROFILE :: cstring("-bash")
 
 TIOCSCTTY :: 0x540E
 TIOCSWINSZ :: 0x5414
+TAB_WIDTH :: 8
 
 width :: 500
 height :: 500
@@ -158,16 +159,10 @@ run :: proc(pty: ^pty_t){
             for i in 0..<n {
                 ch := buf[i]
 
-                if ch == '\n' {
-                    y += cast(i32)font_size
-                    x = 0
-                    continue
-                }
 
                 tmp : [2]byte
                 tmp[0] = ch
                 tmp[1] = 0
-
                 text_surface := ttf.RenderText_Solid(font, cstring(&tmp[0]), 1, color)
 
                 if glyphs[ch] == nil {
@@ -176,10 +171,25 @@ run :: proc(pty: ^pty_t){
                 }
 
                 dest_rect := sdl3.Rect{ x = x, y = y, w = text_surface.w, h = text_surface.h }
-                sdl3.BlitSurface(glyphs[ch], nil, surface, &dest_rect)
+
+                /// stops (mostly) whitespace characters from being 'drawn' to the screen
+                /// still need to deal with the [xxx following the \033 escape code though
+                if ! ( ch < cast(u8)32 || ch > cast(u8)127 ) { 
+                    sdl3.BlitSurface(glyphs[ch], nil, surface, &dest_rect)
+                }
 
                 x += dest_rect.w
 
+                if ch == '\n' {
+                    y += cast(i32)font_size
+                    x = 0
+                    continue
+                }else if ch == '\r'{
+                    x = 0
+                }else if ch == cast(u8)10 || ch == '\t' {
+                    fmt.println("i saw a tab")
+                    x += TAB_WIDTH * dest_rect.w
+                }
             }
             sdl3.UpdateWindowSurface(window)
         }
@@ -200,6 +210,8 @@ run :: proc(pty: ^pty_t){
 
                     key := ev.key.key
                     mod := ev.key.mod
+                    scancode := ev.key.scancode /// < can maybe do someting here to query xkbcommon 
+                    /// eduterm actually uses xkbcommon to do this and then writes it directly to the pty
 
                     ch := cast(u8)key
                     hold := false

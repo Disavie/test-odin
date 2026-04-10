@@ -156,33 +156,25 @@ run :: proc(pty: ^pty_t){
                 y += cast(i32)font_size
             }
 
-            /// since i is immuatble this offset gets appended to skip drawing the extra
-            /// stuff in escape codes
-            offset := 0
             i : int
             for i = 0 ; i < n ; i+=1 {
-            //for i in 0..<n {
 
                 ch := buf[i]
-
+                /// stripping the escape sequences
                 if ch == 0x1B {
                     sz ::  16
                     esc_seq : [sz]byte
+                    seq_len := 0
 
                     for j in 0..<sz {
-                        /// afaik these ascii codes always end in a 
-                        /// A - z letter which is 65 thru 122
-                        if i + j > n || (buf[i+j] >= cast(byte)65 && buf[i+j] <= cast(byte)122) { 
-                            i += j
-                            break 
-                        }
+                        if i + j > n { break }
                         char := buf[i+j]
-                        fmt.print(rune(char))
                         esc_seq[j] = char
+                        seq_len += 1
+                        if char >= cast(byte)65 && char <= cast(byte)90 { break } /// A - Z
+                        if char >= cast(byte)97 && char <= cast(byte)122 { break } /// a - z
                     }
-                    for lttr in esc_seq {
-                        fmt.print(rune(lttr))
-                    }
+                    i += seq_len -1
                     continue
                 }
 

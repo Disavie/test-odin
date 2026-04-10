@@ -21,13 +21,19 @@ print_bytes :: proc(bytes : []byte) {for l  in bytes{fmt.print(l," ")} fmt.print
 
 LOGFILE : ^os.File
 /// Structure that describes the terminal window
+
+Cell :: struct {
+    glyph : u8,
+    surface :^sdl3.Surface
+}
+
 Term :: struct {
 
     x : int,
     y : int,
     width : int,
     height : int,
-    //data : [^]byte, /// < how do i want to store this..
+    data : [^]Cell, /// < how do i want to store this..
 
 }
 
@@ -42,45 +48,6 @@ pty_t :: struct {
     primary, secondary : posix.FD
 }
 
-spawn :: proc(pty : ^pty_t) -> bool{
-    p : posix.pid_t
-
-    p = posix.fork()
-    /// setting the $TERM env to dumb
-    /// causes less and other apps to show the THIS TERMINAL IS NOT COMPLETE warning
-    //env : []cstring = { "TERM=xterm-256color", nil}
-    env : []cstring = { "TERM=dumb", nil}
-
-    if p == 0 {
-        //child
-        posix.close(pty.primary)
-        posix.setsid()
-        linux.ioctl(cast(linux.Fd)pty.secondary, TIOCSCTTY, 0)
-
-
-        posix.dup2(pty.secondary, 0)
-        posix.dup2(pty.secondary, 1)
-        posix.dup2(pty.secondary, 2)
-        posix.close(pty.secondary)
-        // arg0 "-" will use the default login profile
-        // arg0 "-sh" uses the sh login profile
-        // arg0 "-bash" uses the bash login profile... etc
-        // arg0 "sh" will just open sh and not load a login profle
-        posix.execle(
-            SHELL,
-            SHELL_PROFILE, 
-            cast(^rune)nil,
-            env,
-        )
-        return false;
-    }else if p > 0 {
-        //parent 
-        posix.close(pty.secondary)
-        return true
-    }
-    fmt.eprintln("fork error")
-    return false
-}
 /// returns length of the escape sequence 
 strip_esc_seq :: proc(buf : []byte,  buf_sz : c.ssize_t ) -> int {
 
@@ -159,8 +126,6 @@ run :: proc(pty: ^pty_t){
             }
         }
 
-        
-        
         //write shell output to screen
         // Define font and size
         if redraw == true {
@@ -296,62 +261,28 @@ main :: proc () {
     secondary_name : [64]byte
 
     i:= openpty(cast(^i32)&pty.primary, cast(^i32)&pty.secondary, &secondary_name[0], nil, nil)
-    if  i == 1 {
-        fmt.println("brah")
-        return
-    }
-
-    n : int
-    for i in 0..=64 {
-        if secondary_name[i] == 0{
-            n = i
-            break
-        }
-    }
-
-    fmt.println(string(secondary_name[:n]))
+    if  i == 1 { fmt.eprintln("brah"); return}
 
     check = spawn(&pty)
-    if ! check {
-        fmt.println("brah")
-        return
-    }
+    if ! check { fmt.eprintln("brah"); return}
 
     result := linux.ioctl(cast(linux.Fd)pty.primary, TIOCSWINSZ, 0)
     
-    if ! sdl3.Init(sdl3.INIT_VIDEO) {
-        fmt.println("sdl3 init error", sdl3.GetError())
-        return
-    }
+    if ! sdl3.Init(sdl3.INIT_VIDEO) { fmt.eprintln("sdl3 init error", sdl3.GetError()); return}
     defer sdl3.Quit()
 
 
-    if ! ttf.Init() {
-        fmt.println("ttf init error", sdl3.GetError())
-        return
-    }
+    if ! ttf.Init() { fmt.eprintln("ttf init error", sdl3.GetError()); return}
     defer ttf.Quit()
 
     flags := sdl3.WINDOW_RESIZABLE | sdl3.WINDOW_BORDERLESS
     window = sdl3.CreateWindow("test-term", width, height, flags)
-    defer{ 
-        sdl3.DestroyWindow(window)
-        window = nil
-    }
-    if window == nil{
-        fmt.println(sdl3.GetError())
-        return
-    }
+    defer{ sdl3.DestroyWindow(window); window = nil}
+
+    if window == nil{ fmt.eprintln(sdl3.GetError()); return}
     surface = sdl3.GetWindowSurface( window )
-    if surface == nil {
-        fmt.println(sdl3.GetError())
-        return
-    }
-    r : u8 = 0
-    g : u8 = 0
-    b:  u8 = 0
-    a:  u8 = 255
-    color := sdl3.Color({r,g,b,a})
+    if surface == nil { fmt.eprintln(sdl3.GetError()); return}
+
     sdl3.UpdateWindowSurface(window)
 
     run(&pty)

@@ -208,7 +208,6 @@ run :: proc(pty: ^pty_t){
                 switch buf[i] {
                     case '\n':
                         y += cast(i32)font_size
-                        x = 0
                     case '\r': 
                         x = 0
                     case '\t':

@@ -7,6 +7,8 @@ import posix "core:sys/posix"
 import linux "core:sys/linux"
 import "core:c"
 import "core:strings"
+import "core:log"
+import "core:os"
 import  shift_map "map"
 
 when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
@@ -18,6 +20,9 @@ print_bytes :: proc(bytes : []byte) {for l  in bytes{fmt.print(l," ")} fmt.print
 FONT_PATH :: "/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf"
 SHELL :: cstring("/bin/sh")
 SHELL_PROFILE :: cstring("-bash")
+LOG :: "log.log"
+LOGFILE : ^os.File
+
 
 TIOCSCTTY :: 0x540E
 TIOCSWINSZ :: 0x5414
@@ -42,8 +47,8 @@ spawn :: proc(pty : ^pty_t) -> bool{
     p = posix.fork()
     /// setting the $TERM env to dumb
     /// causes less and other apps to show the THIS TERMINAL IS NOT COMPLETE warning
-    //env : []cstring = { "TERM=xterm-256color", nil}
-    env : []cstring = { "TERM=dumb", nil}
+    env : []cstring = { "TERM=xterm-256color", nil}
+    //env : []cstring = { "TERM=dumb", nil}
 
     if p == 0 {
         //child
@@ -57,7 +62,6 @@ spawn :: proc(pty : ^pty_t) -> bool{
         posix.dup2(pty.secondary, 2)
 
         posix.close(pty.secondary)
-        arg0 := cstring("/bin/sh")
         // arg0 "-" will use the default login profile
         // arg0 "-sh" uses the sh login profile
         // arg0 "-bash" uses the bash login profile... etc
@@ -74,10 +78,10 @@ spawn :: proc(pty : ^pty_t) -> bool{
         posix.close(pty.secondary)
         return true
     }
-    fmt.println("fork error")
+    fmt.eprintln("fork error")
     return false
 }
-
+/// extracts the escape sequence from buf into dest 
 strip_esc_seq :: proc(dest, buf : []byte, dest_sz, buf_sz : c.ssize_t ) -> int {
 
     sz ::  cast(c.ssize_t)16
@@ -148,11 +152,14 @@ run :: proc(pty: ^pty_t){
             if n > 0 {
                 redraw = true
                 buf[n] = 0
+                fmt.fprint(LOGFILE,buf[:n])
+                fmt.fprint(LOGFILE,"\n")
             }else{
                 fmt.println("shell closed")
                 return
             }
         }
+
         
         
         //write shell output to screen
@@ -181,12 +188,11 @@ run :: proc(pty: ^pty_t){
                 if ch == 0x1B {
                     len = strip_esc_seq(esc_seq[:], buf[i:], esc_buffer_size, n-i)
                 }
-
                 if len != 0 {
+                    //fmt.println(esc_seq)
                     i += len - 1
                     continue
                 }
-
 
                 tmp : [2]byte
                 tmp[0] = ch
@@ -201,7 +207,7 @@ run :: proc(pty: ^pty_t){
 
                 /// stops (mostly) whitespace characters from being 'drawn' to the screen
                 /// still need to deal with the [xxx following the \033 escape code though
-                if ! ( ch < cast(u8)32 || ch > cast(u8)127 ) { 
+                if ! (ch < cast(u8) 32)  { 
                     sdl3.BlitSurface(glyphs[ch], nil, surface, &dest_rect)
                 }
 
@@ -218,7 +224,7 @@ run :: proc(pty: ^pty_t){
                         // eventually this needs to be changed to move backwards by the amount of 
                         // space that the previous rune occupies(ed)
                         x -= dest_rect.w
-                        dest_rect = sdl3.Rect{ x = x, y = y, w = glyphs[ch].w, h = glyphs[ch].h }
+                        dest_rect = sdl3.Rect{ x = x, y = y, w =glyphs[ch].w, h = glyphs[ch].h }
                         sdl3.FillSurfaceRect(surface, &dest_rect, 0)
                     case 0x07: /// bell
                         ;
@@ -282,6 +288,10 @@ window : ^sdl3.Window = nil
 surface : ^sdl3.Surface = nil
 
 main :: proc () {
+    log, err := os.create(LOG)
+    if err != nil { fmt.eprintf("log couldn't be created"); return }
+    defer os.close(log)
+    LOGFILE = log
     // setup pty
 
     pty : pty_t = {

@@ -29,10 +29,10 @@ Cell :: struct {
 
 Term :: struct {
 
-    x : int,
-    y : int,
-    width : int,
-    height : int,
+    x : i32,
+    y : i32,
+    width : i32,
+    height : i32,
     data : []Cell, /// < how do i want to store this..
 
 }
@@ -72,8 +72,6 @@ run :: proc(pty: ^pty_t){
     
     written := false
     
-    x : i32 = 0
-    y : i32 = 0
 
     n : c.ssize_t
     readable : posix.fd_set
@@ -106,14 +104,14 @@ run :: proc(pty: ^pty_t){
     
 
     ref_surface := ttf.RenderGlyph_Shaded(font, cast(u32)'a', color_fg, color_bg)
-    ref_rect := sdl3.Rect{ x = x, y = y, w =ref_surface.w, h = ref_surface.h }
+    ref_rect := sdl3.Rect{ x = 0, y = 0, w =ref_surface.w, h = ref_surface.h }
 
     term : Term = {
         x = 0,
         y = 0,
-        width = cast(int)(ww / ref_rect.w),
-        height = cast(int)(wh / ref_rect.h),
-        data = make([]Cell, width * height),
+        width = (i32(ww) / ref_rect.w),
+        height = (i32(wh) / ref_rect.h),
+        data = make([]Cell, i32(width) * height),
     }
 
 
@@ -145,12 +143,12 @@ run :: proc(pty: ^pty_t){
         // Define font and size
         if redraw == true {
 
-            if y + cast(i32)font_size >= wh {
-                y = 0
+            if term.y + cast(i32)font_size >= wh {
+                term.y = 0
                 sdl3.FillSurfaceRect(surface, nil, 0)
             }
-            if x >= ww {
-                y += cast(i32)font_size
+            if term.x >= ww {
+                term.y += cast(i32)font_size
             }
 
             i : int
@@ -174,7 +172,7 @@ run :: proc(pty: ^pty_t){
                     glyphs[buf[i]] = ttf.RenderGlyph_Shaded(font, cast(u32)buf[i], color_fg, color_bg)
                 }
 
-                dest_rect := sdl3.Rect{ x = x, y = y, w = glyphs[buf[i]].w, h = glyphs[buf[i]].h }
+                dest_rect := sdl3.Rect{ x = term.x, y = term.y, w = glyphs[buf[i]].w, h = glyphs[buf[i]].h }
 
                 /// stops (mostly) whitespace characters from being 'drawn' to the screen
                 /// still need to deal with the [xxx following the \033 escape code though
@@ -187,21 +185,21 @@ run :: proc(pty: ^pty_t){
 
                 switch buf[i] {
                     case '\n':
-                        y += cast(i32)font_size
+                        term.y += cast(i32)font_size
                     case '\r': 
-                        x = 0
+                        term.x = 0
                     case '\t':
-                        x += TAB_WIDTH * dest_rect.w
+                        term.x += TAB_WIDTH * dest_rect.w
                     case 0x08: ///backspace
                         // eventually this needs to be changed to move backwards by the amount of 
                         // space that the previous rune occupies(ed)
-                        x -= dest_rect.w
-                        dest_rect = sdl3.Rect{ x = x, y = y, w =glyphs[buf[i]].w, h = glyphs[buf[i]].h }
+                        term.x -= dest_rect.w
+                        dest_rect = sdl3.Rect{ x = term.x, y = term.y, w =glyphs[buf[i]].w, h = glyphs[buf[i]].h }
                         sdl3.FillSurfaceRect(surface, &dest_rect, 0)
                     case 0x07: /// bell
                         ;
                     case:
-                        x += dest_rect.w
+                        term.x += dest_rect.w
                 }
             }
             sdl3.UpdateWindowSurface(window)

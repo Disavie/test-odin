@@ -33,7 +33,7 @@ Term :: struct {
     y : int,
     width : int,
     height : int,
-    data : [^]Cell, /// < how do i want to store this..
+    data : []Cell, /// < how do i want to store this..
 
 }
 
@@ -94,13 +94,28 @@ run :: proc(pty: ^pty_t){
     glyphs: map[u8]^sdl3.Surface
 
 
+
     surface = sdl3.GetWindowSurface(window)
     sdl3.UpdateWindowSurface(window)
     sdl3.GetWindowSize(window,&ww,&wh)
 
     // Define color for the text
     color_fg := sdl3.Color{ 255, 255, 255, 255 } // white
-    color_bg := sdl3.Color{ 0, 0, 0, 0 } // black
+    color_bg := sdl3.Color{ 100, 0, 0, 0 } // black
+
+    
+
+    ref_surface := ttf.RenderGlyph_Shaded(font, cast(u32)'a', color_fg, color_bg)
+    ref_rect := sdl3.Rect{ x = x, y = y, w =ref_surface.w, h = ref_surface.h }
+
+    term : Term = {
+        x = 0,
+        y = 0,
+        width = cast(int)(ww / ref_rect.w),
+        height = cast(int)(wh / ref_rect.h),
+        data = make([]Cell, width * height),
+    }
+
 
     for running{
 
@@ -129,20 +144,18 @@ run :: proc(pty: ^pty_t){
         //write shell output to screen
         // Define font and size
         if redraw == true {
+
             if y + cast(i32)font_size >= wh {
-                //reset screen if at the bottom
                 y = 0
-                //surface = sdl3.GetWindowSurface(window)
                 sdl3.FillSurfaceRect(surface, nil, 0)
-
             }
-
             if x >= ww {
                 y += cast(i32)font_size
             }
 
             i : int
             for i = 0 ; i < n ; i+=1 {
+
 
                 /// stripping the escape sequences
                 len : int
@@ -169,6 +182,8 @@ run :: proc(pty: ^pty_t){
                     sdl3.BlitSurface(glyphs[buf[i]], nil, surface, &dest_rect)
                 }
 
+                term.data[i].glyph = buf[i] 
+                term.data[i].surface = glyphs[buf[i]] 
 
                 switch buf[i] {
                     case '\n':

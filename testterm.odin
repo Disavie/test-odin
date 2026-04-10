@@ -1,4 +1,4 @@
-package sdl3test
+package testterm
 
 import "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
@@ -47,8 +47,8 @@ spawn :: proc(pty : ^pty_t) -> bool{
     p = posix.fork()
     /// setting the $TERM env to dumb
     /// causes less and other apps to show the THIS TERMINAL IS NOT COMPLETE warning
-    env : []cstring = { "TERM=xterm-256color", nil}
-    //env : []cstring = { "TERM=dumb", nil}
+    //env : []cstring = { "TERM=xterm-256color", nil}
+    env : []cstring = { "TERM=dumb", nil}
 
     if p == 0 {
         //child

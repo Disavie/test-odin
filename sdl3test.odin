@@ -156,9 +156,35 @@ run :: proc(pty: ^pty_t){
                 y += cast(i32)font_size
             }
 
-            for i in 0..<n {
+            /// since i is immuatble this offset gets appended to skip drawing the extra
+            /// stuff in escape codes
+            offset := 0
+            i : int
+            for i = 0 ; i < n ; i+=1 {
+            //for i in 0..<n {
+
                 ch := buf[i]
 
+                if ch == 0x1B {
+                    sz ::  16
+                    esc_seq : [sz]byte
+
+                    for j in 0..<sz {
+                        /// afaik these ascii codes always end in a 
+                        /// A - z letter which is 65 thru 122
+                        if i + j > n || (buf[i+j] >= cast(byte)65 && buf[i+j] <= cast(byte)122) { 
+                            i += j
+                            break 
+                        }
+                        char := buf[i+j]
+                        fmt.print(rune(char))
+                        esc_seq[j] = char
+                    }
+                    for lttr in esc_seq {
+                        fmt.print(rune(lttr))
+                    }
+                    continue
+                }
 
                 tmp : [2]byte
                 tmp[0] = ch
@@ -179,6 +205,7 @@ run :: proc(pty: ^pty_t){
                 }
 
                 x += dest_rect.w
+
 
                 if ch == '\n' {
                     y += cast(i32)font_size

@@ -182,7 +182,7 @@ run :: proc(pty: ^pty_t){
 
                 term.data[i].glyph = buf[i] 
                 term.data[i].surface = glyphs[buf[i]] 
-
+                //hi
                 switch buf[i] {
                     case '\n':
                         term.y += cast(i32)font_size

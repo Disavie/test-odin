@@ -81,19 +81,17 @@ spawn :: proc(pty : ^pty_t) -> bool{
     fmt.eprintln("fork error")
     return false
 }
-/// extracts the escape sequence from buf into dest 
-strip_esc_seq :: proc(dest, buf : []byte, dest_sz, buf_sz : c.ssize_t ) -> int {
+/// returns length of the escape sequence 
+strip_esc_seq :: proc(buf : []byte,  buf_sz : c.ssize_t ) -> int {
 
     sz ::  cast(c.ssize_t)16
     seq_len := 0
     for i : c.ssize_t= 0 ; i < sz && i < buf_sz ; i+=1 {
 
-        char := buf[i]
-        dest[i] = char
         seq_len += 1
 
-        if char >= cast(byte)65 && char <= cast(byte)90 { return seq_len } /// A - Z
-        if char >= cast(byte)97 && char <= cast(byte)122 { return seq_len } /// a - z
+        if buf[i] >= cast(byte)65 && buf[i] <= cast(byte)90 { return seq_len } /// A - Z
+        if buf[i] >= cast(byte)97 && buf[i] <= cast(byte)122 { return seq_len } /// a - z
     }
     return  0
 }
@@ -153,8 +151,8 @@ run :: proc(pty: ^pty_t){
             if n > 0 {
                 redraw = true
                 buf[n] = 0
-                fmt.fprint(LOGFILE,buf[:n])
-                fmt.fprint(LOGFILE,"\n")
+                //fmt.fprint(LOGFILE,buf[:n])
+                //fmt.fprint(LOGFILE,"\n")
             }else{
                 fmt.println("shell closed")
                 return
@@ -181,13 +179,10 @@ run :: proc(pty: ^pty_t){
             i : int
             for i = 0 ; i < n ; i+=1 {
 
-                ch := buf[i]
                 /// stripping the escape sequences
-                esc_buffer_size :: cast(c.ssize_t)16
-                esc_seq : [esc_buffer_size]byte
                 len : int
-                if ch == 0x1B {
-                    len = strip_esc_seq(esc_seq[:], buf[i:], esc_buffer_size, n-i)
+                if buf[i] == 0x1B {
+                    len = strip_esc_seq(buf[i:], n-i)
                 }
                 if len != 0 {
                     //fmt.println(esc_seq)
@@ -195,26 +190,22 @@ run :: proc(pty: ^pty_t){
                     continue
                 }
 
-                tmp : [2]byte
-                tmp[0] = ch
-                tmp[1] = 0
 
-                if glyphs[ch] == nil {
-                    tmp := [2]byte{ ch, 0 }
-                    glyphs[ch] = ttf.RenderGlyph_Shaded(font, cast(u32)buf[i], color_fg, color_bg)
-                    //glyphs[ch] = ttf.RenderText_Solid(font, cstring(&tmp[0]), 1, color_fg)
+                if glyphs[buf[i]] == nil {
+                    tmp := [2]byte{ buf[i], 0 }
+                    glyphs[buf[i]] = ttf.RenderGlyph_Shaded(font, cast(u32)buf[i], color_fg, color_bg)
                 }
 
-                dest_rect := sdl3.Rect{ x = x, y = y, w = glyphs[ch].w, h = glyphs[ch].h }
+                dest_rect := sdl3.Rect{ x = x, y = y, w = glyphs[buf[i]].w, h = glyphs[buf[i]].h }
 
                 /// stops (mostly) whitespace characters from being 'drawn' to the screen
                 /// still need to deal with the [xxx following the \033 escape code though
-                if ! (ch < cast(u8) 32)  { 
-                    sdl3.BlitSurface(glyphs[ch], nil, surface, &dest_rect)
+                if ! (buf[i] < cast(u8) 32)  { 
+                    sdl3.BlitSurface(glyphs[buf[i]], nil, surface, &dest_rect)
                 }
 
 
-                switch ch {
+                switch buf[i] {
                     case '\n':
                         y += cast(i32)font_size
                         x = 0
@@ -226,7 +217,7 @@ run :: proc(pty: ^pty_t){
                         // eventually this needs to be changed to move backwards by the amount of 
                         // space that the previous rune occupies(ed)
                         x -= dest_rect.w
-                        dest_rect = sdl3.Rect{ x = x, y = y, w =glyphs[ch].w, h = glyphs[ch].h }
+                        dest_rect = sdl3.Rect{ x = x, y = y, w =glyphs[buf[i]].w, h = glyphs[buf[i]].h }
                         sdl3.FillSurfaceRect(surface, &dest_rect, 0)
                     case 0x07: /// bell
                         ;

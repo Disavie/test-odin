@@ -17,19 +17,20 @@ foreign pty {openpty :: proc(primary, secondary : ^c.int, name : [^]byte, term :
 print_bytes :: proc(bytes : []byte) {for l  in bytes{fmt.print(l," ")} fmt.println()}
 
 
-FONT_PATH :: "/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf"
-SHELL :: cstring("/bin/sh")
-SHELL_PROFILE :: cstring("-bash")
-LOG :: "log.log"
+
+
 LOGFILE : ^os.File
+/// Structure that describes the terminal window
+Term :: struct {
 
+    x : int,
+    y : int,
+    width : int,
+    height : int,
+    //data : [^]byte, /// < how do i want to store this..
 
-TIOCSCTTY :: 0x540E
-TIOCSWINSZ :: 0x5414
-TAB_WIDTH :: 8
+}
 
-width :: 500
-height :: 500
 
 winsize_t ::struct {
     row : u16,
@@ -60,7 +61,6 @@ spawn :: proc(pty : ^pty_t) -> bool{
         posix.dup2(pty.secondary, 0)
         posix.dup2(pty.secondary, 1)
         posix.dup2(pty.secondary, 2)
-
         posix.close(pty.secondary)
         // arg0 "-" will use the default login profile
         // arg0 "-sh" uses the sh login profile
@@ -134,7 +134,8 @@ run :: proc(pty: ^pty_t){
     sdl3.GetWindowSize(window,&ww,&wh)
 
     // Define color for the text
-    color := sdl3.Color{ 255, 255, 255, 255 } // white
+    color_fg := sdl3.Color{ 255, 255, 255, 255 } // white
+    color_bg := sdl3.Color{ 0, 0, 0, 0 } // black
 
     for running{
 
@@ -200,7 +201,8 @@ run :: proc(pty: ^pty_t){
 
                 if glyphs[ch] == nil {
                     tmp := [2]byte{ ch, 0 }
-                    glyphs[ch] = ttf.RenderText_Solid(font, cstring(&tmp[0]), 1, color)
+                    glyphs[ch] = ttf.RenderGlyph_Shaded(font, cast(u32)buf[i], color_fg, color_bg)
+                    //glyphs[ch] = ttf.RenderText_Solid(font, cstring(&tmp[0]), 1, color_fg)
                 }
 
                 dest_rect := sdl3.Rect{ x = x, y = y, w = glyphs[ch].w, h = glyphs[ch].h }

@@ -150,6 +150,7 @@ run :: proc(pty: ^pty_t){
                 y = 0
                 surface = sdl3.GetWindowSurface(window)
                 sdl3.FillSurfaceRect(surface, nil, 0)
+
             }
 
             if x >= ww {
@@ -181,14 +182,13 @@ run :: proc(pty: ^pty_t){
                 tmp : [2]byte
                 tmp[0] = ch
                 tmp[1] = 0
-                text_surface := ttf.RenderText_Solid(font, cstring(&tmp[0]), 1, color)
 
                 if glyphs[ch] == nil {
                     tmp := [2]byte{ ch, 0 }
                     glyphs[ch] = ttf.RenderText_Solid(font, cstring(&tmp[0]), 1, color)
                 }
 
-                dest_rect := sdl3.Rect{ x = x, y = y, w = text_surface.w, h = text_surface.h }
+                dest_rect := sdl3.Rect{ x = x, y = y, w = glyphs[ch].w, h = glyphs[ch].h }
 
                 /// stops (mostly) whitespace characters from being 'drawn' to the screen
                 /// still need to deal with the [xxx following the \033 escape code though
@@ -196,18 +196,23 @@ run :: proc(pty: ^pty_t){
                     sdl3.BlitSurface(glyphs[ch], nil, surface, &dest_rect)
                 }
 
-                x += dest_rect.w
 
-
-                if ch == '\n' {
-                    y += cast(i32)font_size
-                    x = 0
-                    continue
-                }else if ch == '\r'{
-                    x = 0
-                }else if ch == cast(u8)10 || ch == '\t' {
-                    fmt.println("i saw a tab")
-                    x += TAB_WIDTH * dest_rect.w
+                switch ch {
+                    case '\n':
+                        y += cast(i32)font_size
+                        x = 0
+                    case '\r': 
+                        x = 0
+                    case '\t':
+                        x += TAB_WIDTH * dest_rect.w
+                    case 0x08: ///backspace
+                        x -= dest_rect.w
+                        dest_rect = sdl3.Rect{ x = x, y = y, w = glyphs[ch].w, h = glyphs[ch].h }
+                        sdl3.FillSurfaceRect(surface, &dest_rect, 0)
+                    case 0x07: /// bell
+                        ;
+                    case:
+                        x += dest_rect.w
                 }
             }
             sdl3.UpdateWindowSurface(window)

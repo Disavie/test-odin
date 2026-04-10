@@ -12,6 +12,9 @@ import  shift_map "map"
 when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
 when ODIN_OS == .Linux do foreign import pty "system:libutil.a"
 foreign pty {openpty :: proc(primary, secondary : ^c.int, name : [^]byte, term : ^posix.termios, ws : ^winsize_t) -> c.int ---}
+print_bytes :: proc(bytes : []byte) {for l  in bytes{fmt.print(l," ")} fmt.println()}
+
+
 
 SHELL :: cstring("/bin/sh")
 SHELL_PROFILE :: cstring("-bash")
@@ -29,18 +32,16 @@ winsize_t ::struct {
     xpixel : u16,
     ypixel : u16,
 }
-
-
 pty_t :: struct {
     primary, secondary : posix.FD
 }
-
-
 
 spawn :: proc(pty : ^pty_t) -> bool{
     p : posix.pid_t
 
     p = posix.fork()
+    /// setting the $TERM env to dumb
+    /// causes less and other apps to show the THIS TERMINAL IS NOT COMPLETE warning
     env : []cstring = { "TERM=dumb", nil}
 
     if p == 0 {
@@ -90,7 +91,6 @@ run :: proc(pty: ^pty_t){
     x : i32 = 0
     y : i32 = 0
 
-    str : cstring
     n : c.ssize_t
     readable : posix.fd_set
 
@@ -134,7 +134,6 @@ run :: proc(pty: ^pty_t){
             if n > 0 {
                 redraw = true
                 buf[n] = 0
-                str = cstring(&buf[0])
             }else{
                 fmt.println("shell closed")
                 return
@@ -165,9 +164,11 @@ run :: proc(pty: ^pty_t){
                 if ch == 0x1B {
                     sz ::  16
                     esc_seq : [sz]byte
+                    esc_seq[0] = ch
                     seq_len := 0
 
-                    for j in 0..<sz {
+
+                    for j in 1..<sz {
                         if i + j > n { break }
                         char := buf[i+j]
                         esc_seq[j] = char
@@ -175,6 +176,7 @@ run :: proc(pty: ^pty_t){
                         if char >= cast(byte)65 && char <= cast(byte)90 { break } /// A - Z
                         if char >= cast(byte)97 && char <= cast(byte)122 { break } /// a - z
                     }
+                    print_bytes(esc_seq[:])
                     i += seq_len -1
                     continue
                 }

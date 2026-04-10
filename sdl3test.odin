@@ -15,7 +15,7 @@ foreign pty {openpty :: proc(primary, secondary : ^c.int, name : [^]byte, term :
 print_bytes :: proc(bytes : []byte) {for l  in bytes{fmt.print(l," ")} fmt.println()}
 
 
-
+FONT_PATH :: "/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf"
 SHELL :: cstring("/bin/sh")
 SHELL_PROFILE :: cstring("-bash")
 
@@ -42,6 +42,7 @@ spawn :: proc(pty : ^pty_t) -> bool{
     p = posix.fork()
     /// setting the $TERM env to dumb
     /// causes less and other apps to show the THIS TERMINAL IS NOT COMPLETE warning
+    //env : []cstring = { "TERM=xterm-256color", nil}
     env : []cstring = { "TERM=dumb", nil}
 
     if p == 0 {
@@ -77,7 +78,21 @@ spawn :: proc(pty : ^pty_t) -> bool{
     return false
 }
 
+strip_esc_seq :: proc(dest, buf : []byte, dest_sz, buf_sz : c.ssize_t ) -> int {
 
+    sz ::  cast(c.ssize_t)16
+    seq_len := 0
+    for i : c.ssize_t= 0 ; i < sz && i < buf_sz ; i+=1 {
+
+        char := buf[i]
+        dest[i] = char
+        seq_len += 1
+
+        if char >= cast(byte)65 && char <= cast(byte)90 { return seq_len } /// A - Z
+        if char >= cast(byte)97 && char <= cast(byte)122 { return seq_len } /// a - z
+    }
+    return  0
+}
 
 
 run :: proc(pty: ^pty_t){
@@ -96,11 +111,10 @@ run :: proc(pty: ^pty_t){
 
     ww, wh : c.int
 
-    
     resized := false
     redraw := false
 
-    font_path := cstring("/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf")
+    font_path := cstring(FONT_PATH)
     font_size := 12
     font := ttf.OpenFont(font_path, cast(f32)font_size)
     if font == nil {
@@ -147,7 +161,7 @@ run :: proc(pty: ^pty_t){
             if y + cast(i32)font_size >= wh {
                 //reset screen if at the bottom
                 y = 0
-                surface = sdl3.GetWindowSurface(window)
+                //surface = sdl3.GetWindowSurface(window)
                 sdl3.FillSurfaceRect(surface, nil, 0)
 
             }
@@ -161,25 +175,18 @@ run :: proc(pty: ^pty_t){
 
                 ch := buf[i]
                 /// stripping the escape sequences
+                esc_buffer_size :: cast(c.ssize_t)16
+                esc_seq : [esc_buffer_size]byte
+                len : int
                 if ch == 0x1B {
-                    sz ::  16
-                    esc_seq : [sz]byte
-                    esc_seq[0] = ch
-                    seq_len := 0
+                    len = strip_esc_seq(esc_seq[:], buf[i:], esc_buffer_size, n-i)
+                }
 
-
-                    for j in 1..<sz {
-                        if i + j > n { break }
-                        char := buf[i+j]
-                        esc_seq[j] = char
-                        seq_len += 1
-                        if char >= cast(byte)65 && char <= cast(byte)90 { break } /// A - Z
-                        if char >= cast(byte)97 && char <= cast(byte)122 { break } /// a - z
-                    }
-                    print_bytes(esc_seq[:])
-                    i += seq_len -1
+                if len != 0 {
+                    i += len - 1
                     continue
                 }
+
 
                 tmp : [2]byte
                 tmp[0] = ch
@@ -208,6 +215,8 @@ run :: proc(pty: ^pty_t){
                     case '\t':
                         x += TAB_WIDTH * dest_rect.w
                     case 0x08: ///backspace
+                        // eventually this needs to be changed to move backwards by the amount of 
+                        // space that the previous rune occupies(ed)
                         x -= dest_rect.w
                         dest_rect = sdl3.Rect{ x = x, y = y, w = glyphs[ch].w, h = glyphs[ch].h }
                         sdl3.FillSurfaceRect(surface, &dest_rect, 0)

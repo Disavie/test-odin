@@ -1,1 +1,4 @@
 *.log
+*.info
+!oterm.info
+

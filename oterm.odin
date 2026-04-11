@@ -17,8 +17,6 @@ foreign pty {openpty :: proc(primary, secondary : ^c.int, name : [^]byte, term :
 print_bytes :: proc(bytes : []byte) {for l  in bytes{fmt.print(l," ")} fmt.println()}
 
 
-
-
 LOGFILE : ^os.File
 /// Structure that describes the terminal window
 

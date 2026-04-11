@@ -162,7 +162,7 @@ run :: proc(pty: ^pty_t){
         ref_surface = ref_surface,
     }
     term.data = make([]Cell, i32(term.width * term.height))
-    set_winsize(pty, &term, ww, wh)
+    set_winsize(pty, &term, term.width, term.height)
 
     for running{
 
@@ -189,7 +189,6 @@ run :: proc(pty: ^pty_t){
         //write shell output to screen
         if redraw == true {
 
-            set_winsize(pty, &term, ww, wh)
             i : int
             for i = 0 ; i < n ; i+=1 {
                 esc_n : int
@@ -271,11 +270,11 @@ run :: proc(pty: ^pty_t){
                     idx := cell.row * new_width + cell.col
                     data_n[idx] = cell
                 }
-                set_winsize(pty, &term, ww, wh)
 
                 term.data   = data_n
                 term.width  = new_width
                 term.height = new_height
+                set_winsize(pty, &term, term.width, term.height)
 
                 tdraw(&term)
                 sdl3.UpdateWindowSurface(window)

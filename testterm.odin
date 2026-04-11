@@ -35,6 +35,12 @@ Term :: struct {
     height : i32,
     data : []Cell, /// < how do i want to store this..
 
+    front : i32,
+    back : i32,
+
+    ref_rect : ^sdl3.Rect,
+    ref_surface : ^sdl3.Surface,
+
 }
 
 
@@ -61,6 +67,75 @@ strip_esc_seq :: proc(buf : []byte,  buf_sz : c.ssize_t ) -> int {
         if buf[i] >= cast(byte)97 && buf[i] <= cast(byte)122 { return seq_len } /// a - z
     }
     return  0
+}
+
+tdraw :: proc(term : ^Term){
+    length := term.width * term.height
+    for i : i32 = 0; i < length; i+=1 {
+        //fmt.print(term.data[i].glyph)
+        ///*
+
+        if term.x >= term.ref_rect.w  * term.width{ term.y += (i32)(term.ref_rect.h)}
+
+        if term.data[i].glyph == 0{
+           term.x += term.ref_rect.w
+        }else if term.data[i].glyph >= 0x20 { ///< glyph < 20 means it is something like \t \n \r etc..
+        
+            dest_rect := sdl3.Rect{ x = term.x, y = term.y,
+                                       w = term.ref_surface.w,
+                                       h = term.ref_surface.h }
+           sdl3.BlitSurface(term.data[i].surface, nil, surface, &dest_rect)
+           term.x += term.ref_rect.w
+        }else{
+        
+            switch term.data[i].glyph {
+            case '\n':
+                term.y += (i32)(term.ref_rect.h)
+                /*
+                for{
+                    i += 1
+                    if i % term.width == 0 {break}
+                }
+                */
+            case '\r': 
+                term.x = 0
+                /*
+                for{
+                    i -=1
+                    if i % term.width == 0 {break}
+                }
+                */
+            case '\t':
+                term.x += TAB_WIDTH * term.ref_rect.w
+                //i += TAB_WIDTH
+            case 0x08: ///backspace
+                // eventually this needs to be changed to move backwards by the amount of 
+                // space that the previous rune occupies(ed)
+                term.x -= term.ref_rect.w
+                if term.x < 0 {
+                    term.x = 0
+                }
+
+                clear_rect := sdl3.Rect{
+                    x = term.x,
+                    y = term.y,
+                    w = term.ref_rect.w,
+                    h = term.ref_rect.h,
+                }
+
+                sdl3.FillSurfaceRect(surface, &clear_rect, 0)
+            case 0x07: /// bell
+                ;
+            case:
+                ;
+                //term.x += term.ref_rect.w
+            }
+
+
+        }
+        //*/
+
+    }
 }
 
 
@@ -112,7 +187,15 @@ run :: proc(pty: ^pty_t){
         width = (i32(ww) / ref_rect.w),
         height = (i32(wh) / ref_rect.h),
         data = make([]Cell, i32(width) * height),
+
+        front = 0,
+        back = 0,
+
+        ref_rect = &ref_rect,
+        ref_surface = ref_surface,
     }
+    fmt.println(term.width)
+    fmt.println(term.height)
 
 
     for running{
@@ -147,9 +230,11 @@ run :: proc(pty: ^pty_t){
                 term.y = 0
                 sdl3.FillSurfaceRect(surface, nil, 0)
             }
+            /*
             if term.x >= ww {
                 term.y += cast(i32)font_size
             }
+            */
 
             i : int
             for i = 0 ; i < n ; i+=1 {
@@ -172,6 +257,8 @@ run :: proc(pty: ^pty_t){
                     glyphs[buf[i]] = ttf.RenderGlyph_Shaded(font, cast(u32)buf[i], color_fg, color_bg)
                 }
 
+                /*
+
                 dest_rect := sdl3.Rect{ x = term.x, y = term.y, w = glyphs[buf[i]].w, h = glyphs[buf[i]].h }
 
                 /// stops (mostly) whitespace characters from being 'drawn' to the screen
@@ -179,29 +266,14 @@ run :: proc(pty: ^pty_t){
                 if ! (buf[i] < cast(u8) 32)  { 
                     sdl3.BlitSurface(glyphs[buf[i]], nil, surface, &dest_rect)
                 }
+                */
 
-                term.data[i].glyph = buf[i] 
-                term.data[i].surface = glyphs[buf[i]] 
+                term.data[term.front].glyph = buf[i] 
+                term.data[term.front].surface = glyphs[buf[i]] 
+                term.front += 1
                 //hi
-                switch buf[i] {
-                    case '\n':
-                        term.y += cast(i32)font_size
-                    case '\r': 
-                        term.x = 0
-                    case '\t':
-                        term.x += TAB_WIDTH * dest_rect.w
-                    case 0x08: ///backspace
-                        // eventually this needs to be changed to move backwards by the amount of 
-                        // space that the previous rune occupies(ed)
-                        term.x -= dest_rect.w
-                        dest_rect = sdl3.Rect{ x = term.x, y = term.y, w =glyphs[buf[i]].w, h = glyphs[buf[i]].h }
-                        sdl3.FillSurfaceRect(surface, &dest_rect, 0)
-                    case 0x07: /// bell
-                        ;
-                    case:
-                        term.x += dest_rect.w
-                }
             }
+            tdraw(&term)
             sdl3.UpdateWindowSurface(window)
         }
 
@@ -215,6 +287,13 @@ run :: proc(pty: ^pty_t){
                     surface = sdl3.GetWindowSurface(window)
                     sdl3.GetWindowSize(window,&wh,&wh)
                     sdl3.UpdateWindowSurface(window)
+
+                    term.width = (i32(ww) / term.ref_rect.w)
+                    term.height = (i32(wh) /term.ref_rect.h)
+                    term.x = 0
+                    term.y = 0
+                    fmt.println("updatred length")
+
                 case sdl3.EventType.QUIT:
                     running = false
                 case sdl3.EventType.KEY_DOWN:

@@ -22,15 +22,21 @@ print_bytes :: proc(bytes : []byte) {for l  in bytes{fmt.print(l," ")} fmt.print
 LOGFILE : ^os.File
 /// Structure that describes the terminal window
 
+window : ^sdl3.Window = nil
+surface : ^sdl3.Surface = nil
+
 Cell :: struct {
     glyph : u8,
-    surface :^sdl3.Surface
+    surface :^sdl3.Surface,
+
+    row : i32,
+    col : i32,
 }
 
 Term :: struct {
 
-    x : i32,
-    y : i32,
+    c_col : i32,
+    c_row : i32,
     width : i32,
     height : i32,
     data : []Cell, /// < how do i want to store this..
@@ -68,89 +74,32 @@ strip_esc_seq :: proc(buf : []byte,  buf_sz : c.ssize_t ) -> int {
     }
     return  0
 }
+tdraw :: proc(term: ^Term) {
+    length := min(term.width * term.height, i32(len(term.data)))
 
-tdraw :: proc(term : ^Term){
-    length := term.width * term.height
-    for i : i32 = 0; i < length; i+=1 {
-        //fmt.print(term.data[i].glyph)
-        ///*
-
-        if term.x >= term.ref_rect.w  * term.width{ term.y += (i32)(term.ref_rect.h)}
-
-        if term.data[i].glyph == 0{
-           term.x += term.ref_rect.w
-        }else if term.data[i].glyph >= 0x20 { ///< glyph < 20 means it is something like \t \n \r etc..
-        
-            dest_rect := sdl3.Rect{ x = term.x, y = term.y,
-                                       w = term.ref_surface.w,
-                                       h = term.ref_surface.h }
-           sdl3.BlitSurface(term.data[i].surface, nil, surface, &dest_rect)
-           term.x += term.ref_rect.w
-        }else{
-        
-            switch term.data[i].glyph {
-            case '\n':
-                term.y += (i32)(term.ref_rect.h)
-                /*
-                for{
-                    i += 1
-                    if i % term.width == 0 {break}
-                }
-                */
-            case '\r': 
-                term.x = 0
-                /*
-                for{
-                    i -=1
-                    if i % term.width == 0 {break}
-                }
-                */
-            case '\t':
-                term.x += TAB_WIDTH * term.ref_rect.w
-                //i += TAB_WIDTH
-            case 0x08: ///backspace
-                // eventually this needs to be changed to move backwards by the amount of 
-                // space that the previous rune occupies(ed)
-                term.x -= term.ref_rect.w
-                if term.x < 0 {
-                    term.x = 0
-                }
-
-                clear_rect := sdl3.Rect{
-                    x = term.x,
-                    y = term.y,
-                    w = term.ref_rect.w,
-                    h = term.ref_rect.h,
-                }
-
-                sdl3.FillSurfaceRect(surface, &clear_rect, 0)
-            case 0x07: /// bell
-                ;
-            case:
-                ;
-                //term.x += term.ref_rect.w
-            }
-
-
+    for i: i32 = 0; i < length; i += 1 {
+        cell := term.data[i]
+        if cell.glyph == 0 || cell.surface == nil {
+            continue
         }
-        //*/
+        fmt.println(cast(rune)cell.glyph, " ", cell.col," ", cell.row)
+        dest_rect := sdl3.Rect{
+            x = cell.col * term.ref_rect.w,
+            y = cell.row * term.ref_rect.h,
+            w = term.ref_rect.w,
+            h = term.ref_rect.h,
+        }
 
+        sdl3.BlitSurface(cell.surface, nil, surface, &dest_rect)
     }
 }
-
-
 run :: proc(pty: ^pty_t){
 
     running := true
-    
-    ev : sdl3.Event
-    
-    written := false
-    
 
+    ev : sdl3.Event
     n : c.ssize_t
     readable : posix.fd_set
-
     ww, wh : c.int
 
     resized := false
@@ -166,27 +115,18 @@ run :: proc(pty: ^pty_t){
 
     glyphs: map[u8]^sdl3.Surface
 
-
-
     surface = sdl3.GetWindowSurface(window)
     sdl3.UpdateWindowSurface(window)
     sdl3.GetWindowSize(window,&ww,&wh)
-
-    // Define color for the text
-    color_fg := sdl3.Color{ 255, 255, 255, 255 } // white
-    color_bg := sdl3.Color{ 100, 0, 0, 0 } // black
-
-    
 
     ref_surface := ttf.RenderGlyph_Shaded(font, cast(u32)'a', color_fg, color_bg)
     ref_rect := sdl3.Rect{ x = 0, y = 0, w =ref_surface.w, h = ref_surface.h }
 
     term : Term = {
-        x = 0,
-        y = 0,
+        c_col = 0,
+        c_row = 0,
         width = (i32(ww) / ref_rect.w),
         height = (i32(wh) / ref_rect.h),
-        data = make([]Cell, i32(width) * height),
 
         front = 0,
         back = 0,
@@ -194,9 +134,9 @@ run :: proc(pty: ^pty_t){
         ref_rect = &ref_rect,
         ref_surface = ref_surface,
     }
-    fmt.println(term.width)
-    fmt.println(term.height)
-
+    term.data = make([]Cell, i32(term.width * term.height))
+    fmt.println( ref_rect.w, " ", ref_rect.h)
+    fmt.println( term.width, " ", term.height)
 
     for running{
 
@@ -208,6 +148,7 @@ run :: proc(pty: ^pty_t){
         timeout : posix.timeval = {
             tv_sec = 0,
             tv_usec = 10000, // 10 ms timeout
+                              //tv_usec = 10000, // 10 ms timeout
         }
         if posix.select(cast(c.int)pty.primary + 1, &readable, nil, nil,&timeout) > 0{
             n = posix.read(pty.primary, &buf[0], len(buf)- 1 )
@@ -226,20 +167,8 @@ run :: proc(pty: ^pty_t){
         // Define font and size
         if redraw == true {
 
-            if term.y + cast(i32)font_size >= wh {
-                term.y = 0
-                sdl3.FillSurfaceRect(surface, nil, 0)
-            }
-            /*
-            if term.x >= ww {
-                term.y += cast(i32)font_size
-            }
-            */
-
             i : int
             for i = 0 ; i < n ; i+=1 {
-
-
                 /// stripping the escape sequences
                 len : int
                 if buf[i] == 0x1B {
@@ -251,90 +180,92 @@ run :: proc(pty: ^pty_t){
                     continue
                 }
 
+                switch buf[i]{
 
-                if glyphs[buf[i]] == nil {
-                    tmp := [2]byte{ buf[i], 0 }
-                    glyphs[buf[i]] = ttf.RenderGlyph_Shaded(font, cast(u32)buf[i], color_fg, color_bg)
-                }
-
-                /*
-
-                dest_rect := sdl3.Rect{ x = term.x, y = term.y, w = glyphs[buf[i]].w, h = glyphs[buf[i]].h }
-
-                /// stops (mostly) whitespace characters from being 'drawn' to the screen
-                /// still need to deal with the [xxx following the \033 escape code though
-                if ! (buf[i] < cast(u8) 32)  { 
-                    sdl3.BlitSurface(glyphs[buf[i]], nil, surface, &dest_rect)
-                }
-                */
-
-                term.data[term.front].glyph = buf[i] 
-                term.data[term.front].surface = glyphs[buf[i]] 
-                term.front += 1
-                //hi
+                case '\n':
+                    term.c_row += 1
+                case '\r':
+                    term.c_col = 0
+                case '\t':
+                    term.c_col += TAB_WIDTH
+                case 0x08:
+                    if term.c_col > 0 { term.c_col -= 1 }
+                case 0x07: 
+                    ;
+                case:
+                    if glyphs[buf[i]] == nil {
+                        glyphs[buf[i]] = ttf.RenderGlyph_Shaded(font, cast(u32)buf[i], color_fg, color_bg)
+                    }
+                    term.data[term.front].glyph   = buf[i]
+                    term.data[term.front].surface = glyphs[buf[i]]
+                    term.data[term.front].col     = term.c_col  // baked in at write time
+                    term.data[term.front].row     = term.c_row
+                    term.front    += 1
+                    term.c_col += 1
+                    if term.c_col >= term.width {               // wrap
+                        term.c_col = 0
+                        term.c_row += 1
+                    }}
             }
             tdraw(&term)
             sdl3.UpdateWindowSurface(window)
         }
+        for sdl3.PollEvent(&ev){
+            #partial switch ev.type {
+            case sdl3.EventType.WINDOW_RESIZED:
+                fmt.println("Updated")
+                //if resized i need to get a new surface
+                surface = sdl3.GetWindowSurface(window)
+                sdl3.GetWindowSize(window,&ww,&wh)
+                sdl3.UpdateWindowSurface(window)
 
-                   //ms
-            for sdl3.PollEvent(&ev){
-                #partial switch ev.type {
-                case sdl3.EventType.WINDOW_RESIZED:
-                    fmt.println("Updated")
-                    //if resized i need to get a new surface
-                    sdl3.DestroySurface(surface)
-                    surface = sdl3.GetWindowSurface(window)
-                    sdl3.GetWindowSize(window,&wh,&wh)
-                    sdl3.UpdateWindowSurface(window)
+                term.width = (i32(ww) / term.ref_rect.w)
+                term.height = (i32(wh) /term.ref_rect.h)
+                data_n := make([]Cell, i32(term.width * term.height))
 
-                    term.width = (i32(ww) / term.ref_rect.w)
-                    term.height = (i32(wh) /term.ref_rect.h)
-                    term.x = 0
-                    term.y = 0
-                    fmt.println("updatred length")
+                for i in 0..< term.front {
+                    data_n[i] = term.data[i] 
+                }
+                term.data = data_n
 
-                case sdl3.EventType.QUIT:
-                    running = false
-                case sdl3.EventType.KEY_DOWN:
 
-                    key := ev.key.key
-                    mod := ev.key.mod
-                    scancode := ev.key.scancode /// < can maybe do someting here to query xkbcommon 
-                    /// eduterm actually uses xkbcommon to do this and then writes it directly to the pty
+            case sdl3.EventType.QUIT:
+                running = false
+            case sdl3.EventType.KEY_DOWN:
 
-                    ch := cast(u8)key
-                    hold := false
+                key := ev.key.key
+                mod := ev.key.mod
 
-                    if sdl3.Keymod.LSHIFT in mod || sdl3.Keymod.RSHIFT in mod{
-                        if ch >= u8('a') && ch <= u8('z') {
-                            ch -= u8('a' - 'A')
-                            fmt.println(rune(ch))
+                ch := cast(u8)key
+                hold := false
 
-                        } else {
-                            ch = shift_map.shifted(ch)
-                        }if ch == 0{
-                            hold = true
-                        }
+                if sdl3.Keymod.LSHIFT in mod || sdl3.Keymod.RSHIFT in mod{
+                    if ch >= u8('a') && ch <= u8('z') {
+                        ch -= u8('a' - 'A')
+                        fmt.println(rune(ch))
+
+                    } else {
+                        ch = shift_map.shifted(ch)
+                    }if ch == 0{
+                        hold = true
                     }
+                }
 
-                    if sdl3.Keymod.RCTRL in mod || sdl3.Keymod.LCTRL in mod{
-                        ch &= 0x1F
-                    }
-                    if ! hold {
-                        posix.write(pty.primary,&ch ,1)
-                    }
+                if sdl3.Keymod.RCTRL in mod || sdl3.Keymod.LCTRL in mod{
+                    ch &= 0x1F
+                }
+                if ! hold {
+                    posix.write(pty.primary,&ch ,1)
 
                 }
             }
-            //ms
-            redraw = false
-            sdl3.Delay(5);
+        }
+
+        redraw = false
+        sdl3.Delay(5);
     }
 }
 
-window : ^sdl3.Window = nil
-surface : ^sdl3.Surface = nil
 
 main :: proc () {
     log, err := os.create(LOG)

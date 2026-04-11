@@ -1,4 +1,5 @@
 *.log
 *.info
 !oterm.info
+oterm
 

@@ -1,4 +1,10 @@
-i need to switch away from sdl3 because it is incredibly slow to render
+
+> todo // 
+> refactoring
+> work on parsing ansi ommands -> actually comply with the stuff i have under terminfo
+> glfw + FreeType instead of sdl3?
+> refacoring into smaller functions
+
 //-> use FreeText to do text render instead of sdl3/ttf
 
 -> change back to glfw or maybe just use wayland-client

@@ -280,30 +280,16 @@ run :: proc(pty: ^pty_t){
                 running = false
             case sdl3.EventType.KEY_DOWN:
 
-                key := ev.key.key
                 mod := ev.key.mod
+                scancode := ev.key.scancode
 
-                ch := cast(u8)key
-                hold := false
-
-                if sdl3.Keymod.LSHIFT in mod || sdl3.Keymod.RSHIFT in mod{
-                    if ch >= u8('a') && ch <= u8('z') {
-                        ch -= u8('a' - 'A')
-                        fmt.println(rune(ch))
-
-                    } else {
-                        ch = shift_map.shifted(ch)
-                    }if ch == 0{
-                        hold = true
-                    }
-                }
+                key := sdl3.GetKeyFromScancode(ev.key.scancode, ev.key.mod, false )
 
                 if sdl3.Keymod.RCTRL in mod || sdl3.Keymod.LCTRL in mod{
-                    ch &= 0x1F
+                    key &= 0x1F
                 }
-                if ! hold {
-                    posix.write(pty.primary,&ch ,1)
-
+                if key < 256 {
+                    posix.write(pty.primary,cast(^byte)&key, 1)
                 }
             }
         }

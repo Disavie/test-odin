@@ -41,9 +41,6 @@ Term :: struct {
     height : i32,
     data : []Cell, /// < how do i want to store this..
 
-    front : i32,
-    back : i32,
-
     ref_rect : ^sdl3.Rect,
     ref_surface : ^sdl3.Surface,
 
@@ -75,6 +72,9 @@ strip_esc_seq :: proc(buf : []byte,  buf_sz : c.ssize_t ) -> int {
     return  0
 }
 tdraw :: proc(term: ^Term) {
+
+    sdl3.FillSurfaceRect(surface, nil, sdl3.MapSurfaceRGB(surface, 0, 0, 0))  // clear to black
+
     length := min(term.width * term.height, i32(len(term.data)))
 
     for i: i32 = 0; i < length; i += 1 {
@@ -93,6 +93,26 @@ tdraw :: proc(term: ^Term) {
         sdl3.BlitSurface(cell.surface, nil, surface, &dest_rect)
     }
 }
+
+scroll :: proc(term: ^Term) {
+    // shift every row up by 1
+    for row: i32 = 0; row < term.height - 1; row += 1 {
+        for col: i32 = 0; col < term.width; col += 1 {
+            src := (row + 1) * term.width + col
+            dst := row * term.width + col
+            term.data[dst] = term.data[src]
+            term.data[dst].row = row  
+        }
+    }
+    // clear the last row
+    for col: i32 = 0; col < term.width; col += 1 {
+        idx := (term.height - 1) * term.width + col
+        term.data[idx] = {}
+    }
+    term.c_row = term.height - 1
+}
+
+
 run :: proc(pty: ^pty_t){
 
     running := true
@@ -128,8 +148,6 @@ run :: proc(pty: ^pty_t){
         width = (i32(ww) / ref_rect.w),
         height = (i32(wh) / ref_rect.h),
 
-        front = 0,
-        back = 0,
 
         ref_rect = &ref_rect,
         ref_surface = ref_surface,
@@ -148,7 +166,6 @@ run :: proc(pty: ^pty_t){
         timeout : posix.timeval = {
             tv_sec = 0,
             tv_usec = 10000, // 10 ms timeout
-                              //tv_usec = 10000, // 10 ms timeout
         }
         if posix.select(cast(c.int)pty.primary + 1, &readable, nil, nil,&timeout) > 0{
             n = posix.read(pty.primary, &buf[0], len(buf)- 1 )
@@ -170,13 +187,13 @@ run :: proc(pty: ^pty_t){
             i : int
             for i = 0 ; i < n ; i+=1 {
                 /// stripping the escape sequences
-                len : int
+                esc_n : int
                 if buf[i] == 0x1B {
-                    len = strip_esc_seq(buf[i:], n-i)
+                    esc_n = strip_esc_seq(buf[i:], n-i)
                 }
-                if len != 0 {
+                if esc_n != 0 {
                     //fmt.println(esc_seq)
-                    i += len - 1
+                    i += esc_n - 1
                     continue
                 }
 
@@ -184,28 +201,42 @@ run :: proc(pty: ^pty_t){
 
                 case '\n':
                     term.c_row += 1
+                    if term.c_row >= term.height { scroll(&term) }
+                    // clear the new row
+                    for col: i32 = 0; col < term.width; col += 1 {
+                        term.data[term.c_row * term.width + col] = {}
+                    }
+
                 case '\r':
                     term.c_col = 0
                 case '\t':
-                    term.c_col += TAB_WIDTH
+                    term.c_col = (term.c_col + TAB_WIDTH) &~ (TAB_WIDTH - 1) // snap to tab stop
                 case 0x08:
-                    if term.c_col > 0 { term.c_col -= 1 }
+                    if term.c_col > 0 { 
+                        term.c_col -= 1
+                        idx := term.c_row * term.width + term.c_col
+                        term.data[idx] = {}  // clear the cell
+                    }
                 case 0x07: 
                     ;
                 case:
                     if glyphs[buf[i]] == nil {
                         glyphs[buf[i]] = ttf.RenderGlyph_Shaded(font, cast(u32)buf[i], color_fg, color_bg)
                     }
-                    term.data[term.front].glyph   = buf[i]
-                    term.data[term.front].surface = glyphs[buf[i]]
-                    term.data[term.front].col     = term.c_col  // baked in at write time
-                    term.data[term.front].row     = term.c_row
-                    term.front    += 1
+                    idx := term.c_row * term.width + term.c_col  // derive index from cursor
+                    if idx >= i32(len(term.data)) { break }
+                    term.data[idx].glyph   = buf[i]
+                    term.data[idx].surface = glyphs[buf[i]]
+                    term.data[idx].col     = term.c_col
+                    term.data[idx].row     = term.c_row
                     term.c_col += 1
-                    if term.c_col >= term.width {               // wrap
+                    if term.c_col >= term.width {
                         term.c_col = 0
                         term.c_row += 1
-                    }}
+                    }
+                    if term.c_row >= term.height { scroll(&term) }
+
+                }
             }
             tdraw(&term)
             sdl3.UpdateWindowSurface(window)
@@ -213,21 +244,27 @@ run :: proc(pty: ^pty_t){
         for sdl3.PollEvent(&ev){
             #partial switch ev.type {
             case sdl3.EventType.WINDOW_RESIZED:
-                fmt.println("Updated")
-                //if resized i need to get a new surface
                 surface = sdl3.GetWindowSurface(window)
-                sdl3.GetWindowSize(window,&ww,&wh)
-                sdl3.UpdateWindowSurface(window)
+                sdl3.GetWindowSize(window, &ww, &wh)
 
-                term.width = (i32(ww) / term.ref_rect.w)
-                term.height = (i32(wh) /term.ref_rect.h)
-                data_n := make([]Cell, i32(term.width * term.height))
+                new_width  := i32(ww) / term.ref_rect.w
+                new_height := i32(wh) / term.ref_rect.h
 
-                for i in 0..< term.front {
-                    data_n[i] = term.data[i] 
+                data_n := make([]Cell, new_width * new_height)
+
+                for cell in term.data {
+                    if cell.glyph == 0 { continue }
+                    if cell.col >= new_width || cell.row >= new_height { continue }
+                    idx := cell.row * new_width + cell.col
+                    data_n[idx] = cell
                 }
-                term.data = data_n
 
+                term.data   = data_n
+                term.width  = new_width
+                term.height = new_height
+
+                tdraw(&term)
+                sdl3.UpdateWindowSurface(window)
 
             case sdl3.EventType.QUIT:
                 running = false

@@ -82,7 +82,7 @@ tdraw :: proc(term: ^Term) {
         if cell.glyph == 0 || cell.surface == nil {
             continue
         }
-        fmt.println(cast(rune)cell.glyph, " ", cell.col," ", cell.row)
+        //fmt.println(cast(rune)cell.glyph, " ", cell.col," ", cell.row)
         dest_rect := sdl3.Rect{
             x = cell.col * term.ref_rect.w,
             y = cell.row * term.ref_rect.h,
@@ -112,6 +112,15 @@ scroll :: proc(term: ^Term) {
     term.c_row = term.height - 1
 }
 
+set_winsize :: proc(pty: ^pty_t, term: ^Term, ww: c.int, wh: c.int) {
+    ws := winsize_t{
+        row    = u16(term.height),
+        col    = u16(term.width),
+        xpixel = u16(ww),
+        ypixel = u16(wh),
+    }
+    linux.ioctl(cast(linux.Fd)pty.primary, TIOCSWINSZ, uintptr(&ws))
+}
 
 run :: proc(pty: ^pty_t){
 
@@ -153,8 +162,7 @@ run :: proc(pty: ^pty_t){
         ref_surface = ref_surface,
     }
     term.data = make([]Cell, i32(term.width * term.height))
-    fmt.println( ref_rect.w, " ", ref_rect.h)
-    fmt.println( term.width, " ", term.height)
+    set_winsize(pty, &term, ww, wh)
 
     for running{
 
@@ -172,8 +180,6 @@ run :: proc(pty: ^pty_t){
             if n > 0 {
                 redraw = true
                 buf[n] = 0
-                //fmt.fprint(LOGFILE,buf[:n])
-                //fmt.fprint(LOGFILE,"\n")
             }else{
                 fmt.println("shell closed")
                 return
@@ -181,18 +187,16 @@ run :: proc(pty: ^pty_t){
         }
 
         //write shell output to screen
-        // Define font and size
         if redraw == true {
 
             i : int
             for i = 0 ; i < n ; i+=1 {
-                /// stripping the escape sequences
                 esc_n : int
                 if buf[i] == 0x1B {
                     esc_n = strip_esc_seq(buf[i:], n-i)
                 }
                 if esc_n != 0 {
-                    //fmt.println(esc_seq)
+                    /// TODO : handle these
                     i += esc_n - 1
                     continue
                 }
@@ -235,7 +239,7 @@ run :: proc(pty: ^pty_t){
                         term.c_row += 1
                     }
                     if term.c_row >= term.height { scroll(&term) }
-
+                    set_winsize(pty, &term, ww, wh)
                 }
             }
             tdraw(&term)
@@ -299,7 +303,7 @@ run :: proc(pty: ^pty_t){
         }
 
         redraw = false
-        sdl3.Delay(5);
+        sdl3.Delay(10);
     }
 }
 

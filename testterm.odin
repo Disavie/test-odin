@@ -189,12 +189,15 @@ run :: proc(pty: ^pty_t){
         //write shell output to screen
         if redraw == true {
 
+            set_winsize(pty, &term, ww, wh)
             i : int
             for i = 0 ; i < n ; i+=1 {
                 esc_n : int
                 if buf[i] == 0x1B {
                     esc_n = strip_esc_seq(buf[i:], n-i)
                 }
+
+
                 if esc_n != 0 {
                     /// TODO : handle these
                     i += esc_n - 1
@@ -237,9 +240,15 @@ run :: proc(pty: ^pty_t){
                     if term.c_col >= term.width {
                         term.c_col = 0
                         term.c_row += 1
-                    }
-                    if term.c_row >= term.height { scroll(&term) }
-                    set_winsize(pty, &term, ww, wh)
+                        if term.c_row >= term.height {
+                            scroll(&term)
+                        } else {
+                            // clear the new row we just wrapped onto
+                            for col: i32 = 0; col < term.width; col += 1 {
+                                term.data[term.c_row * term.width + col] = {}
+                            }
+                        }
+                    } 
                 }
             }
             tdraw(&term)
@@ -262,6 +271,7 @@ run :: proc(pty: ^pty_t){
                     idx := cell.row * new_width + cell.col
                     data_n[idx] = cell
                 }
+                set_winsize(pty, &term, ww, wh)
 
                 term.data   = data_n
                 term.width  = new_width

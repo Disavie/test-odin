@@ -15,7 +15,7 @@ spawn :: proc(pty : ^pty_t) -> bool{
     /// setting the $TERM env to dumb
     /// causes less and other apps to show the THIS TERMINAL IS NOT COMPLETE warning
     //env : []cstring = { "TERM=xterm-256color", nil}
-    env : []cstring = { "TERM=xterm", nil}
+    env : []cstring = { "TERM=oterm", nil}
 
     if p == 0 {
         //child

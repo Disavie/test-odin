@@ -17,9 +17,6 @@ foreign pty {openpty :: proc(primary, secondary : ^c.int, name : [^]byte, term :
 print_bytes :: proc(bytes : []byte) {for l  in bytes{fmt.print(l," ")} fmt.println()}
 
 
-LOGFILE : ^os.File
-/// Structure that describes the terminal window
-
 window : ^sdl3.Window = nil
 surface : ^sdl3.Surface = nil
 
@@ -31,6 +28,7 @@ Cell :: struct {
     col : i32,
 }
 
+/// Structure that describes the terminal window
 Term :: struct {
 
     c_col : i32,
@@ -51,6 +49,7 @@ winsize_t ::struct {
     xpixel : u16,
     ypixel : u16,
 }
+
 pty_t :: struct {
     primary, secondary : posix.FD
 }
@@ -268,7 +267,7 @@ run :: proc(pty: ^pty_t){
                     idx := cell.row * new_width + cell.col
                     data_n[idx] = cell
                 }
-
+                delete(term.data)
                 term.data   = data_n
                 term.width  = new_width
                 term.height = new_height
@@ -319,7 +318,6 @@ main :: proc () {
     log, err := os.create(LOG)
     if err != nil { fmt.eprintf("log couldn't be created"); return }
     defer os.close(log)
-    LOGFILE = log
     // setup pty
 
     pty : pty_t = {

@@ -65,7 +65,7 @@ pty_t :: struct {
 /// returns length of the escape sequence 
 strip_esc_seq :: proc(buf : []byte,  buf_sz : c.ssize_t ) -> int {
 
-    sz ::  cast(c.ssize_t)64
+    sz ::  cast(c.ssize_t)1024
     seq_len := 0
     for i : c.ssize_t= 0 ; i < sz && i < buf_sz ; i+=1 {
 
@@ -299,6 +299,9 @@ run :: proc(pty: ^pty_t){
                 }
 
                 if esc_n != 0 {
+                   
+
+                 //   fmt.println(buf[:esc_n])
                     /// TODO : handle these
                     i += esc_n - 1
                     continue

@@ -9,7 +9,6 @@ FONT :: "liberation/LiberationMono-Bold.ttf"
 FONT_PATH :: "/usr/share/fonts/"+FONT
 SHELL_PATH :: cstring("/bin/bash")
 SHELL :: cstring("bash")
-OPTS :: []cstring {"bash","--login"}
 LOG :: "log.log"
 TIOCSCTTY :: 0x540E
 TIOCSWINSZ :: 0x5414
@@ -18,7 +17,7 @@ height :: 500
 width :: 500
 
 // Define color for the text
+color_fg := sdl3.Color{ 255, 255, 255, 00 } // white
+color_bg := sdl3.Color{ 0, 0 ,0 , 0 } 
 // AA RR GG BB
-color_fg := sdl3.Color{ 255, 255, 255, 255 } // white
-color_bg := sdl3.Color{ 0, 0 ,100 , 0 } // black
 term_bg : u32 = 0x00000000  

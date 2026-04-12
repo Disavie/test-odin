@@ -190,6 +190,49 @@ t_check_rune :: proc(b : byte, term : ^Term){
 
 }
 
+t_handle_event :: proc(pty :^pty_t, event : sdl3.Event)-> bool{
+    ww, wh : c.int 
+    #partial switch event.type {
+    case sdl3.EventType.WINDOW_RESIZED:
+        surface = sdl3.GetWindowSurface(window)
+        sdl3.GetWindowSize(window, &ww, &wh)
+
+        new_width  := i32(ww) / term.ref_rect.w
+        new_height := i32(wh) / term.ref_rect.h
+
+        data_n := make([]Cell, new_width * new_height)
+
+        for cell in term.data {
+            if cell.glyph == 0 { continue }
+            if cell.col >= new_width || cell.row >= new_height { continue }
+            idx := cell.row * new_width + cell.col
+            data_n[idx] = cell
+        }
+        delete(term.data)
+        term.data   = data_n
+        term.width  = new_width
+        term.height = new_height
+        set_winsize(pty, &term, term.width, term.height)
+
+        tdraw(&term)
+        sdl3.UpdateWindowSurface(window)
+
+    case sdl3.EventType.QUIT:
+        return false
+    case sdl3.EventType.KEY_DOWN:
+
+        key := sdl3.GetKeyFromScancode(event.key.scancode, event.key.mod, false )
+
+        if sdl3.Keymod.RCTRL in event.key.mod || sdl3.Keymod.LCTRL in event.key.mod{
+            key &= 0x1F
+        }
+        if key < 256 { /// UTF-8
+            posix.write(pty.primary,cast(^byte)&key, 1)
+        }
+    }
+    return true
+}
+
 run :: proc(pty: ^pty_t){
     running := true
     redraw := false
@@ -241,20 +284,21 @@ run :: proc(pty: ^pty_t){
 
         //write shell output to screen
         if redraw == true {
-
             i : int
             for i = 0 ; i < n ; i+=1 {
                 esc_n : int
+            ///============= WORK ON THIS TOMORROW ====================///////////
                 if buf[i] == 0x1B {
                     esc_n = strip_esc_seq(buf[i:], n-i)
                 }
-
 
                 if esc_n != 0 {
                     /// TODO : handle these
                     i += esc_n - 1
                     continue
                 }
+                // ============================================///////
+
 
                 t_check_rune(buf[i],&term)
 
@@ -264,46 +308,7 @@ run :: proc(pty: ^pty_t){
         }
 
         for sdl3.PollEvent(&ev){
-            #partial switch ev.type {
-            case sdl3.EventType.WINDOW_RESIZED:
-                surface = sdl3.GetWindowSurface(window)
-                sdl3.GetWindowSize(window, &ww, &wh)
-
-                new_width  := i32(ww) / term.ref_rect.w
-                new_height := i32(wh) / term.ref_rect.h
-
-                data_n := make([]Cell, new_width * new_height)
-
-                for cell in term.data {
-                    if cell.glyph == 0 { continue }
-                    if cell.col >= new_width || cell.row >= new_height { continue }
-                    idx := cell.row * new_width + cell.col
-                    data_n[idx] = cell
-                }
-                delete(term.data)
-                term.data   = data_n
-                term.width  = new_width
-                term.height = new_height
-                set_winsize(pty, &term, term.width, term.height)
-
-                tdraw(&term)
-                sdl3.UpdateWindowSurface(window)
-
-            case sdl3.EventType.QUIT:
-                running = false
-            case sdl3.EventType.KEY_DOWN:
-                mod := ev.key.mod
-                scancode := ev.key.scancode
-
-                key := sdl3.GetKeyFromScancode(ev.key.scancode, ev.key.mod, false )
-
-                if sdl3.Keymod.RCTRL in mod || sdl3.Keymod.LCTRL in mod{
-                    key &= 0x1F
-                }
-                if key < 256 { /// UTF-8
-                    posix.write(pty.primary,cast(^byte)&key, 1)
-                }
-            }
+            if !t_handle_event(pty,ev) { return }
         }
 
         redraw = false

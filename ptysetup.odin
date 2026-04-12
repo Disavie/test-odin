@@ -33,8 +33,9 @@ spawn :: proc(pty : ^pty_t) -> bool{
         // arg0 "-bash" uses the bash login profile... etc
         // arg0 "sh" will just open sh and not load a login profle
         posix.execle(
+            SHELL_PATH,
             SHELL,
-            SHELL_PROFILE, 
+            OPTS,
             cast(^rune)nil,
             env,
         )

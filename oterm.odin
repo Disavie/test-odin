@@ -279,7 +279,6 @@ run :: proc(pty: ^pty_t){
             case sdl3.EventType.QUIT:
                 running = false
             case sdl3.EventType.KEY_DOWN:
-
                 mod := ev.key.mod
                 scancode := ev.key.scancode
 
@@ -298,7 +297,6 @@ run :: proc(pty: ^pty_t){
         sdl3.Delay(10);
     }
 }
-
 
 main :: proc () {
     log, err := os.create(LOG)

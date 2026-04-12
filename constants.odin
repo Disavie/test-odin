@@ -4,9 +4,11 @@ import "vendor:sdl3"
 
 
 //this will eventually get moved to a config - ish file but for now they are just constants
-FONT_PATH :: "/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf"
-SHELL :: cstring("/bin/sh")
-SHELL_PROFILE :: cstring("-bash")
+FONT :: "liberation/LiberationMono-Bold.ttf"
+FONT_PATH :: "/usr/share/fonts/"+FONT
+SHELL_PATH :: cstring("/bin/bash")
+SHELL :: cstring("bash")
+OPTS :: cstring("--login")
 LOG :: "log.log"
 TIOCSCTTY :: 0x540E
 TIOCSWINSZ :: 0x5414

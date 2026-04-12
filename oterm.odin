@@ -76,9 +76,11 @@ strip_esc_seq :: proc(buf : []byte,  buf_sz : c.ssize_t ) -> int {
     }
     return  0
 }
+
+
 tdraw :: proc(term: ^Term) {
 
-    sdl3.FillSurfaceRect(surface, nil, sdl3.MapSurfaceRGB(surface, 0, 0, 0))  // clear to black
+    sdl3.FillSurfaceRect(surface, nil, term_bg)  
 
     length := min(term.width * term.height, i32(len(term.data)))
 
@@ -165,7 +167,10 @@ t_check_rune :: proc(b : byte, term : ^Term){
         ;
     case:
         if glyphs[b] == nil {
-            glyphs[b] = ttf.RenderGlyph_Shaded(pen.font, cast(u32)b, pen.fg, pen.bg)
+             raw := ttf.RenderGlyph_LCD(pen.font, cast(u32)b, pen.fg, pen.bg)
+             glyphs[b] = sdl3.ConvertSurface(raw, surface.format)
+             sdl3.DestroySurface(raw)
+            //  glyphs[b] = ttf.RenderGlyph_Shaded(pen.font, cast(u32)b, pen.fg, pen.bg)
         }
         idx := term.c_row * term.width + term.c_col  // derive index from cursor
         if idx >= i32(len(term.data)) { break }
@@ -235,8 +240,6 @@ t_handle_event :: proc(pty :^pty_t, event : sdl3.Event)-> bool{
 
 run :: proc(pty: ^pty_t){
     running := true
-    redraw := false
-
     ev : sdl3.Event
     n : c.ssize_t
     readable : posix.fd_set
@@ -244,7 +247,7 @@ run :: proc(pty: ^pty_t){
 
     sdl3.GetWindowSize(window,&ww,&wh)
 
-    ref_surface := ttf.RenderGlyph_Shaded(pen.font, cast(u32)'a', pen.fg, pen.bg)
+    ref_surface := ttf.RenderGlyph_LCD(pen.font, cast(u32)'a', pen.fg, pen.bg)
     ref_rect := sdl3.Rect{ x = 0, y = 0, w =ref_surface.w, h = ref_surface.h }
 
     term = {
@@ -262,6 +265,7 @@ run :: proc(pty: ^pty_t){
     set_winsize(pty, &term, term.width, term.height)
 
     for running{
+        redraw := false
 
         buf : [256]byte
 
@@ -305,14 +309,11 @@ run :: proc(pty: ^pty_t){
             }
             tdraw(&term)
             sdl3.UpdateWindowSurface(window)
-        }
+            }
 
         for sdl3.PollEvent(&ev){
             if !t_handle_event(pty,ev) { return }
         }
-
-        redraw = false
-        sdl3.Delay(10);
     }
 }
 

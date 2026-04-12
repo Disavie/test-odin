@@ -4,7 +4,7 @@ import "vendor:sdl3"
 
 
 //this will eventually get moved to a config - ish file but for now they are just constants
-FONT_SIZE :: 12
+FONT_SIZE :: 14
 FONT :: "liberation/LiberationMono-Bold.ttf"
 FONT_PATH :: "/usr/share/fonts/"+FONT
 SHELL_PATH :: cstring("/bin/bash")
@@ -18,5 +18,7 @@ height :: 500
 width :: 500
 
 // Define color for the text
+// AA RR GG BB
 color_fg := sdl3.Color{ 255, 255, 255, 255 } // white
-color_bg := sdl3.Color{ 100, 0, 0, 0 } // black
+color_bg := sdl3.Color{ 0, 0 ,100 , 0 } // black
+term_bg : u32 = 0x00000000  

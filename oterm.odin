@@ -47,8 +47,7 @@ Term :: struct {
     ref_surface : ^sdl3.Surface,
 
 }
-term : Term ///< this is the terminal
-
+/// global
 glyphs: map[u8]^sdl3.Surface
 
 winsize_t ::struct {
@@ -197,7 +196,7 @@ t_check_rune :: proc(b : byte, term : ^Term){
 
 }
 
-t_handle_event :: proc(pty :^pty_t, event : sdl3.Event)-> bool{
+t_handle_event :: proc(pty :^pty_t, event : sdl3.Event, term : ^Term)-> bool{
     ww, wh : c.int 
     #partial switch event.type {
     case sdl3.EventType.WINDOW_RESIZED:
@@ -219,9 +218,9 @@ t_handle_event :: proc(pty :^pty_t, event : sdl3.Event)-> bool{
         term.data   = data_n
         term.width  = new_width
         term.height = new_height
-        set_winsize(pty, &term, term.width, term.height)
+        set_winsize(pty, term, term.width, term.height)
 
-        tdraw(&term)
+        tdraw(term)
         sdl3.UpdateWindowSurface(window)
 
     case sdl3.EventType.QUIT:
@@ -252,7 +251,7 @@ run :: proc(pty: ^pty_t){
     ref_surface := ttf.RenderGlyph_LCD(pen.font, cast(u32)'a', pen.fg, pen.bg)
     ref_rect := sdl3.Rect{ x = 0, y = 0, w =ref_surface.w, h = ref_surface.h }
 
-    term = {
+    term := Term{
         c_col = 0,
         c_row = 0,
         width = (i32(ww) / ref_rect.w),
@@ -262,8 +261,9 @@ run :: proc(pty: ^pty_t){
         ref_rect = &ref_rect,
         ref_surface = ref_surface,
     }
-
     term.data = make([]Cell, i32(term.width * term.height))
+    defer( delete(term.data))
+
     set_winsize(pty, &term, term.width, term.height)
 
     for running{
@@ -317,7 +317,7 @@ run :: proc(pty: ^pty_t){
             }
 
         for sdl3.PollEvent(&ev){
-            if !t_handle_event(pty,ev) { return }
+            if !t_handle_event(pty,ev, &term) { return }
         }
     }
 }
@@ -372,4 +372,5 @@ main :: proc () {
     if surface == nil { fmt.eprintln(sdl3.GetError()); return}
 
     run(&pty)
+    delete(glyphs)
 }

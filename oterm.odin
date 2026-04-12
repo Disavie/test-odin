@@ -20,6 +20,13 @@ print_bytes :: proc(bytes : []byte) {for l  in bytes{fmt.print(l," ")} fmt.print
 window : ^sdl3.Window = nil
 surface : ^sdl3.Surface = nil
 
+Pen :: struct {
+    fg : sdl3.Color,
+    bg : sdl3.Color,
+    font : ^ttf.Font,
+}
+pen : Pen
+
 Cell :: struct {
     glyph : u8,
     surface :^sdl3.Surface,
@@ -27,7 +34,6 @@ Cell :: struct {
     row : i32,
     col : i32,
 }
-
 /// Structure that describes the terminal window
 Term :: struct {
 
@@ -41,7 +47,9 @@ Term :: struct {
     ref_surface : ^sdl3.Surface,
 
 }
+term : Term ///< this is the terminal
 
+glyphs: map[u8]^sdl3.Surface
 
 winsize_t ::struct {
     row : u16,
@@ -119,36 +127,84 @@ set_winsize :: proc(pty: ^pty_t, term: ^Term, ww: c.int, wh: c.int) {
     linux.ioctl(cast(linux.Fd)pty.primary, TIOCSWINSZ, uintptr(&ws))
 }
 
-run :: proc(pty: ^pty_t){
+tread :: proc(pty : ^pty_t, buf : [^]byte, length : uint) -> c.ssize_t { 
 
+    n := posix.read(pty.primary, &buf[0], length)
+    if n > 0 {
+        buf[n] = 0
+    }else{
+        fmt.println("shell closed")
+        return -1
+    }
+    return n
+}
+
+t_check_rune :: proc(b : byte, term : ^Term){
+
+    switch b{
+
+    case '\n':
+        term.c_row += 1
+        if term.c_row >= term.height { scroll(term) }
+        // clear the new row
+        for col: i32 = 0; col < term.width; col += 1 {
+            term.data[term.c_row * term.width + col] = {}
+        }
+
+    case '\r':
+        term.c_col = 0
+    case '\t':
+        term.c_col = (term.c_col + TAB_WIDTH) &~ (TAB_WIDTH - 1) // snap to tab stop
+    case 0x08:
+        if term.c_col > 0 { 
+            term.c_col -= 1
+            idx := term.c_row * term.width + term.c_col
+            term.data[idx] = {}  // clear the cell
+        }
+    case 0x07: 
+        ;
+    case:
+        if glyphs[b] == nil {
+            glyphs[b] = ttf.RenderGlyph_Shaded(pen.font, cast(u32)b, pen.fg, pen.bg)
+        }
+        idx := term.c_row * term.width + term.c_col  // derive index from cursor
+        if idx >= i32(len(term.data)) { break }
+        term.data[idx].glyph   = b
+        term.data[idx].surface = glyphs[b]
+        term.data[idx].col     = term.c_col
+        term.data[idx].row     = term.c_row
+        term.c_col += 1
+        if term.c_col >= term.width {
+            term.c_col = 0
+            term.c_row += 1
+            if term.c_row >= term.height {
+                scroll(term)
+            } else {
+                // clear the new row we just wrapped onto
+                for col: i32 = 0; col < term.width; col += 1 {
+                    term.data[term.c_row * term.width + col] = {}
+                }
+            }
+        } 
+    }
+
+}
+
+run :: proc(pty: ^pty_t){
     running := true
+    redraw := false
 
     ev : sdl3.Event
     n : c.ssize_t
     readable : posix.fd_set
     ww, wh : c.int
 
-    resized := false
-    redraw := false
-
-    font_path := cstring(FONT_PATH)
-    font_size := 12
-    font := ttf.OpenFont(font_path, cast(f32)font_size)
-    if font == nil {
-        fmt.println("Failed to load font:", sdl3.GetError())
-        return
-    }
-
-    glyphs: map[u8]^sdl3.Surface
-
-    surface = sdl3.GetWindowSurface(window)
-    sdl3.UpdateWindowSurface(window)
     sdl3.GetWindowSize(window,&ww,&wh)
 
-    ref_surface := ttf.RenderGlyph_Shaded(font, cast(u32)'a', color_fg, color_bg)
+    ref_surface := ttf.RenderGlyph_Shaded(pen.font, cast(u32)'a', pen.fg, pen.bg)
     ref_rect := sdl3.Rect{ x = 0, y = 0, w =ref_surface.w, h = ref_surface.h }
 
-    term : Term = {
+    term = {
         c_col = 0,
         c_row = 0,
         width = (i32(ww) / ref_rect.w),
@@ -158,6 +214,7 @@ run :: proc(pty: ^pty_t){
         ref_rect = &ref_rect,
         ref_surface = ref_surface,
     }
+
     term.data = make([]Cell, i32(term.width * term.height))
     set_winsize(pty, &term, term.width, term.height)
 
@@ -173,14 +230,13 @@ run :: proc(pty: ^pty_t){
             tv_usec = 10000, // 10 ms timeout
         }
         if posix.select(cast(c.int)pty.primary + 1, &readable, nil, nil,&timeout) > 0{
-            n = posix.read(pty.primary, &buf[0], len(buf)- 1 )
-            if n > 0 {
-                redraw = true
-                buf[n] = 0
-            }else{
-                fmt.println("shell closed")
+            n = tread(pty,&buf[0],len(buf-1))
+            if n == -1 {
                 return
+            }else if n > 0{
+                redraw = true
             }
+
         }
 
         //write shell output to screen
@@ -200,56 +256,13 @@ run :: proc(pty: ^pty_t){
                     continue
                 }
 
-                switch buf[i]{
+                t_check_rune(buf[i],&term)
 
-                case '\n':
-                    term.c_row += 1
-                    if term.c_row >= term.height { scroll(&term) }
-                    // clear the new row
-                    for col: i32 = 0; col < term.width; col += 1 {
-                        term.data[term.c_row * term.width + col] = {}
-                    }
-
-                case '\r':
-                    term.c_col = 0
-                case '\t':
-                    term.c_col = (term.c_col + TAB_WIDTH) &~ (TAB_WIDTH - 1) // snap to tab stop
-                case 0x08:
-                    if term.c_col > 0 { 
-                        term.c_col -= 1
-                        idx := term.c_row * term.width + term.c_col
-                        term.data[idx] = {}  // clear the cell
-                    }
-                case 0x07: 
-                    ;
-                case:
-                    if glyphs[buf[i]] == nil {
-                        glyphs[buf[i]] = ttf.RenderGlyph_Shaded(font, cast(u32)buf[i], color_fg, color_bg)
-                    }
-                    idx := term.c_row * term.width + term.c_col  // derive index from cursor
-                    if idx >= i32(len(term.data)) { break }
-                    term.data[idx].glyph   = buf[i]
-                    term.data[idx].surface = glyphs[buf[i]]
-                    term.data[idx].col     = term.c_col
-                    term.data[idx].row     = term.c_row
-                    term.c_col += 1
-                    if term.c_col >= term.width {
-                        term.c_col = 0
-                        term.c_row += 1
-                        if term.c_row >= term.height {
-                            scroll(&term)
-                        } else {
-                            // clear the new row we just wrapped onto
-                            for col: i32 = 0; col < term.width; col += 1 {
-                                term.data[term.c_row * term.width + col] = {}
-                            }
-                        }
-                    } 
-                }
             }
             tdraw(&term)
             sdl3.UpdateWindowSurface(window)
         }
+
         for sdl3.PollEvent(&ev){
             #partial switch ev.type {
             case sdl3.EventType.WINDOW_RESIZED:
@@ -287,7 +300,7 @@ run :: proc(pty: ^pty_t){
                 if sdl3.Keymod.RCTRL in mod || sdl3.Keymod.LCTRL in mod{
                     key &= 0x1F
                 }
-                if key < 256 {
+                if key < 256 { /// UTF-8
                     posix.write(pty.primary,cast(^byte)&key, 1)
                 }
             }
@@ -299,6 +312,24 @@ run :: proc(pty: ^pty_t){
 }
 
 main :: proc () {
+
+    if ! sdl3.Init(sdl3.INIT_VIDEO) { fmt.eprintln("sdl3 init error", sdl3.GetError()); return}
+    defer sdl3.Quit()
+
+    if ! ttf.Init() { fmt.eprintln("ttf init error", sdl3.GetError()); return}
+    defer ttf.Quit()
+
+    pen.fg = color_fg
+    pen.bg = color_bg
+    font_path := cstring(FONT_PATH)
+    font_size := FONT_SIZE
+    font := ttf.OpenFont(font_path, cast(f32)font_size)
+    if font == nil {
+        fmt.println("Failed to load font:", font_path, "\n",sdl3.GetError())
+        return
+    }
+    pen.font = font
+
     log, err := os.create(LOG)
     if err != nil { fmt.eprintf("log couldn't be created"); return }
     defer os.close(log)
@@ -320,13 +351,6 @@ main :: proc () {
     if ! check { fmt.eprintln("brah"); return}
 
     result := linux.ioctl(cast(linux.Fd)pty.primary, TIOCSWINSZ, 0)
-    
-    if ! sdl3.Init(sdl3.INIT_VIDEO) { fmt.eprintln("sdl3 init error", sdl3.GetError()); return}
-    defer sdl3.Quit()
-
-
-    if ! ttf.Init() { fmt.eprintln("ttf init error", sdl3.GetError()); return}
-    defer ttf.Quit()
 
     flags := sdl3.WINDOW_RESIZABLE | sdl3.WINDOW_BORDERLESS
     window = sdl3.CreateWindow("test-term", width, height, flags)
@@ -335,8 +359,6 @@ main :: proc () {
     if window == nil{ fmt.eprintln(sdl3.GetError()); return}
     surface = sdl3.GetWindowSurface( window )
     if surface == nil { fmt.eprintln(sdl3.GetError()); return}
-
-    sdl3.UpdateWindowSurface(window)
 
     run(&pty)
 }

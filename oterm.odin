@@ -65,12 +65,14 @@ pty_t :: struct {
 /// returns length of the escape sequence 
 strip_esc_seq :: proc(buf : []byte,  buf_sz : c.ssize_t ) -> int {
 
-    sz ::  cast(c.ssize_t)16
+    sz ::  cast(c.ssize_t)64
     seq_len := 0
     for i : c.ssize_t= 0 ; i < sz && i < buf_sz ; i+=1 {
 
         seq_len += 1
 
+        if buf[i] == 0x07 { return seq_len}
+        if buf[i] == '\\' { return seq_len}
         if buf[i] >= cast(byte)65 && buf[i] <= cast(byte)90 { return seq_len } /// A - Z
         if buf[i] >= cast(byte)97 && buf[i] <= cast(byte)122 { return seq_len } /// a - z
     }

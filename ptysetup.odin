@@ -32,6 +32,7 @@ spawn :: proc(pty : ^pty_t) -> bool{
         // arg0 "-sh" uses the sh login profile
         // arg0 "-bash" uses the bash login profile... etc
         // arg0 "sh" will just open sh and not load a login profle
+        /*
         posix.execle(
             SHELL_PATH,
             SHELL,
@@ -39,6 +40,10 @@ spawn :: proc(pty : ^pty_t) -> bool{
             cast(^rune)nil,
             env,
         )
+        */
+        posix.setenv(cstring("TERM"),cstring("oterm"), true)
+        args : []cstring = { SHELL, "--login", nil }
+        posix.execvp(SHELL_PATH,&args[0])
         return false;
     }else if p > 0 {
         //parent 

@@ -9,7 +9,7 @@ FONT :: "liberation/LiberationMono-Bold.ttf"
 FONT_PATH :: "/usr/share/fonts/"+FONT
 SHELL_PATH :: cstring("/bin/bash")
 SHELL :: cstring("bash")
-OPTS :: cstring("--login")
+OPTS :: []cstring {"bash","--login"}
 LOG :: "log.log"
 TIOCSCTTY :: 0x540E
 TIOCSWINSZ :: 0x5414

@@ -2,8 +2,7 @@
 > todo // 
 > refactoring
 > work on parsing ansi ommands -> actually comply with the stuff i have under terminfo
-> glfw + FreeType instead of sdl3?
-> refacoring into smaller functions
+> GLFW FOR WINDOW, FreeType for ttf->bitmap, opengl for gpu text rendering... 
 
 //-> use FreeText to do text render instead of sdl3/ttf
 

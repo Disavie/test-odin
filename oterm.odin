@@ -312,7 +312,7 @@ run :: proc(pty: ^pty_t){
     for running{
         redraw := false
 
-        buf : [256]byte
+        buf : [1024]byte
 
         // read shell output to buffer
         posix.FD_ZERO(&readable)

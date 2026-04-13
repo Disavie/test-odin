@@ -26,7 +26,7 @@ spawn :: proc(pty : ^pty_t) -> bool{
         posix.close(pty.secondary)
 
         posix.setenv(cstring("TERM"),cstring("oterm"), true)
-        args : []cstring = { SHELL, "--login", nil }
+        args : []cstring = { SHELL, "-bash", nil }
         posix.execvp(SHELL_PATH,&args[0])
         return false;
     }else if p > 0 {

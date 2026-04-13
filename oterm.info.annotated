@@ -32,7 +32,7 @@ oterm|odin-terminal,                # Terminal names
     bel=^G,                          # Bell character
     blink=\E[5m,                     # Blink attribute
     bold=\E[1m,                      # Bold attribute
-    cbt=\E[Z,                         # Back tab
+    cbt=\E[Z,                         # Back tab 
     civis=\E[?25l,                   # Make cursor invisible
     cnorm=\E[?12l\E[?25h,            # Make cursor normal (visible)
     cvvis=\E[?12;25h,                # Make cursor very visible (solid block)
@@ -84,7 +84,7 @@ oterm|odin-terminal,                # Terminal names
 # Text Attributes
 # ----------------------
     dim=\E[2m,                        # Dim text
-    rev=\E[7m,                        # Reverse video
+COMPLETED--for now    rev=\E[7m,                        # Reverse video
     ritm=\E[23m,                       # Exit italic mode
     rmso=\E[27m,                        # Exit standout mode
     rmul=\E[24m,                        # Exit underline mode

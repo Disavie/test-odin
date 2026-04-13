@@ -25,6 +25,7 @@ printd :: proc{ printd_i , printd_s }
 
 window : ^sdl3.Window = nil
 surface : ^sdl3.Surface = nil
+terminal_background : u32
 
 Pen :: struct {
     fg : sdl3.Color,
@@ -67,24 +68,33 @@ pty_t :: struct {
     primary, secondary : posix.FD
 }
 
-clear :: proc(term : ^Term) {  // naive approach for now, this removed ability for scrollback
-    sdl3.FillSurfaceRect(surface, nil, term_bg)
+csi_clear :: proc(term : ^Term) {  // naive approach for now, this removed ability for scrollback
+    sdl3.FillSurfaceRect(surface, nil, terminal_background)
     sdl3.UpdateWindowSurface(window)
     delete(term.data)
     term.data = make([]Cell, term.height * term.width)
 }
 
-home :: proc(term : ^Term) {
+csi_home :: proc(term : ^Term) {
     fmt.println("house")
     term.c_col = 0
     term.c_row = 0
 }
 
+csi_rv :: proc (term : ^Term) {
+   pen.fg = ~pen.fg 
+   pen.bg = ~pen.bg 
+   terminal_background = ~terminal_background
+}
+
+
+
 handle_csi :: proc(buf : []byte, term : ^Term) -> int{
     seq_len : int = 0
     
-    if strings.contains(string(cstring(&buf[0])), "H") do home(term)
-    if strings.contains(string(cstring(&buf[0])), "2J") do clear(term)
+    if strings.contains(string(cstring(&buf[0])), "H") do csi_home(term)
+    if strings.contains(string(cstring(&buf[0])), "2J") do csi_clear(term)
+    if strings.contains(string(cstring(&buf[0])), "7m") do csi_rv(term)
 
     for b in buf{
         seq_len += 1
@@ -157,7 +167,7 @@ parse_ansi :: proc(buf : []byte, term : ^Term) -> int {
 
 tdraw :: proc(term: ^Term) {
 
-    sdl3.FillSurfaceRect(surface, nil, term_bg)  
+    sdl3.FillSurfaceRect(surface, nil, terminal_background)  
 
     length := min(term.width * term.height, i32(len(term.data)))
 
@@ -403,15 +413,19 @@ when !SHOW_ANSI_RAW {
 }
 
 main :: proc () {
+    
+    /// Color Setup.. move this later when I set up a config system
+    terminal_background = term_bg
+    pen.fg = color_fg
+    pen.bg = color_bg
 
     if ! sdl3.Init(sdl3.INIT_VIDEO) { fmt.eprintln("sdl3 init error", sdl3.GetError()); return}
     defer sdl3.Quit()
 
     if ! ttf.Init() { fmt.eprintln("ttf init error", sdl3.GetError()); return}
     defer ttf.Quit()
-
-    pen.fg = color_fg
-    pen.bg = color_bg
+    
+    /// This will also need to be adjusted when I set up a config system
     font_path := cstring(FONT_PATH)
     font_size := FONT_SIZE
     font := ttf.OpenFont(font_path, cast(f32)font_size)

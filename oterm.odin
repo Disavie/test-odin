@@ -42,6 +42,17 @@ Cell :: struct {
     row : i32,
     col : i32,
 }
+
+CSI_MODE :: enum u32 {
+    BOLD            = 1 << 0,
+    DIM             = 1 << 1,
+    ITALIC          = 1 << 2,
+    UNDERLINE       = 1 << 3,
+    BLINKING        = 1 << 4,
+    INVERSE         = 1 << 5,
+    HIDDEN          = 1 << 6,
+    STRIKETHROUGH   = 1 << 7,
+}
 /// Structure that describes the terminal window
 Term :: struct {
 
@@ -49,10 +60,13 @@ Term :: struct {
     c_row : i32,
     width : i32,
     height : i32,
-    data : []Cell, /// < how do i want to store this..
+    data : []Cell,
 
     ref_rect : ^sdl3.Rect,
     ref_surface : ^sdl3.Surface,
+    
+    csi_mode : bit_set[CSI_MODE],
+
 
 }
 /// global
@@ -82,19 +96,64 @@ csi_home :: proc(term : ^Term) {
     term.c_row = 0
 }
 
-csi_rv :: proc (term : ^Term) {
+/*
+csi_set_inverse :: proc (term : ^Term) {
    pen.fg = ~pen.fg 
    pen.bg = ~pen.bg 
    terminal_background = ~terminal_background
+}
+*/
+csi_no_count :: proc(cmd : rune , term : ^Term){
+   switch(cmd){
+        case 'H':
+            csi_home(term)
+        case:
+        ;
+   }
+
+}
+csi_reset :: proc(){
+    //todo
+}
+
+csi_with_count :: proc(num : int, cmd : rune, term : ^Term){
+    switch(cmd){
+        case 'm':
+            switch num { 
+                case 0:
+                    term.csi_mode = {}
+                case 1:
+                    term.csi_mode += {.BOLD}
+                case 2:
+                    term.csi_mode += {.DIM}
+                case 3:
+                    term.csi_mode += {.ITALIC}
+                case 4:
+                   term.csi_mode += {.UNDERLINE}
+                case 5:
+                   term.csi_mode += {.BLINKING}
+                case 7:
+                    term.csi_mode += {.INVERSE}
+                case 8:
+                    term.csi_mode += {.HIDDEN}
+                case 9:
+                    term.csi_mode += {.STRIKETHROUGH}
+            }
+        case 'J':
+            switch (num) {
+                case 2:
+                    csi_clear(term)
+            }
+
+    }
 }
 
 
 handle_csi :: proc(buf : []byte, term : ^Term) -> int{
     seq_len : int = 0
     
-    if strings.contains(string(cstring(&buf[0])), "H") do csi_home(term)
-    if strings.contains(string(cstring(&buf[0])), "2J") do csi_clear(term)
-    if strings.contains(string(cstring(&buf[0])), "7m") do csi_rv(term)
+   // if strings.contains(string(cstring(&buf[0])), "H") do csi_home(term)
+   // if strings.contains(string(cstring(&buf[0])), "2J") do csi_clear(term)
 
 
     for b in buf{
@@ -105,9 +164,16 @@ handle_csi :: proc(buf : []byte, term : ^Term) -> int{
     }
     /// -1 to strip off the trailing [A-z]
     num, ok := strconv.parse_int(strings.string_from_ptr(&buf[0],seq_len-1))
-    if ok do printd(num)
+    //fmt.println("THE NUM IS: ", num, "AND THE COMMAND IS", rune(buf[seq_len-1]))
+    if !ok { 
+        csi_no_count(rune(buf[seq_len-1]), term) 
+    }else{
+        fmt.println(num)
+        csi_with_count(num, rune(buf[seq_len-1]), term)
+    }
 
-    return seq_len
+    return seq_len 
+
 }
 
 handle_osc :: proc(buf : []byte, term : ^Term) -> int{

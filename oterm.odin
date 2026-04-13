@@ -1,5 +1,7 @@
 package testterm
 
+DEBUG :: false
+
 import "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
 import "core:fmt"
@@ -15,6 +17,7 @@ when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
 when ODIN_OS == .Linux do foreign import pty "system:libutil.a"
 foreign pty {openpty :: proc(primary, secondary : ^c.int, name : [^]byte, term : ^posix.termios, ws : ^winsize_t) -> c.int ---}
 print_bytes :: proc(bytes : []byte) {for l  in bytes{fmt.print(l," ")} fmt.println()}
+
 
 
 window : ^sdl3.Window = nil
@@ -61,21 +64,49 @@ pty_t :: struct {
     primary, secondary : posix.FD
 }
 
-/// returns length of the escape sequence 
-strip_esc_seq :: proc(buf : []byte,  buf_sz : c.ssize_t ) -> int {
+handle_csi :: proc(buf : []byte) -> int{
+    seq_len : int = 0
 
-    sz ::  cast(c.ssize_t)1024
-    seq_len := 0
-    for i : c.ssize_t= 0 ; i < sz && i < buf_sz ; i+=1 {
-
+    for b in buf{
         seq_len += 1
-
-        if buf[i] == 0x07 { return seq_len}
-        if buf[i] == '\\' { return seq_len}
-        if buf[i] >= cast(byte)65 && buf[i] <= cast(byte)90 { return seq_len } /// A - Z
-        if buf[i] >= cast(byte)97 && buf[i] <= cast(byte)122 { return seq_len } /// a - z
+        if b >= cast(byte)65 && b <= cast(byte)90 { return seq_len } /// A - Z
+        if b >= cast(byte)97 && b <= cast(byte)122 { return seq_len } /// a - z
     }
-    return  0
+    return seq_len
+}
+
+handle_osc :: proc(buf : []byte) -> int{
+
+    seq_len : int = 0
+
+    for b in buf{
+        seq_len += 1
+        if b == 0x07 { return seq_len }
+        if b == 0x9C { return seq_len }
+    }
+    return seq_len
+}
+
+/// returns length of the escape sequence 
+parse_ansi :: proc(buf : []byte) -> int {
+
+    // This isnt a perfect solution for example
+    // if I see a \033X with nothing else it will break
+
+    switch buf[0]{
+
+        case '[':
+            /// CSI (control sequence introducer)
+            return 1 + handle_csi(buf[1:])
+            /// Ends in A-Z or a-z
+        case ']':
+            /// OSC
+            return 1 + handle_osc(buf[1:])
+            /// Ends in 0x07 (BEL) or ST (0x9C, 0x1B, 0x5C)
+        case:
+            return 0
+
+    }
 }
 
 
@@ -295,21 +326,26 @@ run :: proc(pty: ^pty_t){
                 esc_n : int
             ///============= WORK ON THIS TOMORROW ====================///////////
                 if buf[i] == 0x1B {
-                    esc_n = strip_esc_seq(buf[i:], n-i)
+                    esc_n = parse_ansi(buf[i+1:])
                 }
 
                 if esc_n != 0 {
                    
-
-                 //   fmt.println(buf[:esc_n])
                     /// TODO : handle these
-                    i += esc_n - 1
+                    i += esc_n
                     continue
                 }
-                // ============================================///////
-
-
-                t_check_rune(buf[i],&term)
+ when DEBUG {               // ============================================///////
+for b in buf[:len(buf)] {
+    if b >= 32 && b < 127 {            // printable ASCII
+        fmt.print("%c", b)
+    } else {
+        fmt.print("\\%03o", b)         // print non-printable as octal (\033)
+    }
+}
+fmt.println()
+}
+            t_check_rune(buf[i],&term)
 
             }
             tdraw(&term)

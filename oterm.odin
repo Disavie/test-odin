@@ -100,6 +100,14 @@ csi_no_count :: proc(cmd : rune , term : ^Term){
         case 'K': ///[K or [nK can be sent
             idx := term.c_row * term.width + term.c_col
             term.data[idx] = {}  // clear the cell
+        case 'A':
+            term.c_row+=1
+        case 'B':
+            term.c_row-=1
+        case 'C':
+            term.c_col+=1
+        case 'D':
+            term.c_col-=1
         case:
         ;
    }

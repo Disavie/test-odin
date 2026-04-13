@@ -1,5 +1,5 @@
 # this is literally a rip from vt100 for now.. i will update later
-oterm|odin-terminal,
+oterm| odin-terminal,
 	am, bce, km, mc5i, mir, msgr, npc, xenl,
 	colors#8, cols#80, it#8, lines#24, pairs#64,
 	acsc=``aaffggiijjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~,

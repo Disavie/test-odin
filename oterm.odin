@@ -96,17 +96,13 @@ csi_home :: proc(term : ^Term) {
     term.c_row = 0
 }
 
-/*
-csi_set_inverse :: proc (term : ^Term) {
-   pen.fg = ~pen.fg 
-   pen.bg = ~pen.bg 
-   terminal_background = ~terminal_background
-}
-*/
 csi_no_count :: proc(cmd : rune , term : ^Term){
    switch(cmd){
         case 'H':
             csi_home(term)
+        case 'K': ///[K or [nK can be sent
+            idx := term.c_row * term.width + term.c_col
+            term.data[idx] = {}  // clear the cell
         case:
         ;
    }
@@ -162,6 +158,12 @@ csi_with_count :: proc(num : int, cmd : rune, term : ^Term){
                     csi_clear(term)
             }
 
+        case 'K':
+            switch (num){
+
+            
+            }
+
     }
 }
 
@@ -180,8 +182,8 @@ handle_csi :: proc(buf : []byte, term : ^Term) -> int{
     //fmt.println("THE NUM IS: ", num, "AND THE COMMAND IS", rune(buf[seq_len-1]))
     if !ok { 
         csi_no_count(rune(buf[seq_len-1]), term) 
+
     }else{
-        fmt.println(num)
         csi_with_count(num, rune(buf[seq_len-1]), term)
     }
 
@@ -203,7 +205,6 @@ handle_osc :: proc(buf : []byte, term : ^Term) -> int{
 
 /// returns length of the escape sequence 
 parse_ansi :: proc(buf : []byte, term : ^Term) -> int {
-
     // Prevents crashing if I see a \033X with nothing else it will break
     if len(buf) == 0 { return 0 }
 
@@ -305,6 +306,7 @@ tread :: proc(pty : ^pty_t, buf : [^]byte, length : uint) -> c.ssize_t {
     n := posix.read(pty.primary, &buf[0], length)
     if n > 0 {
         buf[n] = 0
+        printd("yo")
     }else{
         fmt.println("shell closed")
         return -1
@@ -328,11 +330,12 @@ t_check_rune :: proc(b : byte, term : ^Term){
         term.c_col = 0
     case '\t':
         term.c_col = (term.c_col + TAB_WIDTH) &~ (TAB_WIDTH - 1) // snap to tab stop
-    case 0x08:
+    case 0x08: ///< Backspace isn't actually responsible for deleting, seeing a \b is sent by bash when I send a LEFT signal
+               ///  bash sends a \b AND a \e[K which signals to delete
         if term.c_col > 0 { 
             term.c_col -= 1
-            idx := term.c_row * term.width + term.c_col
-            term.data[idx] = {}  // clear the cell
+            //idx := term.c_row * term.width + term.c_col
+            //term.data[idx] = {}  // clear the cell
         }
     case 0x07: 
         ;
@@ -341,7 +344,6 @@ t_check_rune :: proc(b : byte, term : ^Term){
              raw := ttf.RenderGlyph_LCD(pen.font, cast(u32)b, pen.fg, pen.bg)
              glyphs[b] = sdl3.ConvertSurface(raw, surface.format)
              sdl3.DestroySurface(raw)
-            //  glyphs[b] = ttf.RenderGlyph_Shaded(pen.font, cast(u32)b, pen.fg, pen.bg)
         }
         idx := term.c_row * term.width + term.c_col  // derive index from cursor
         if idx >= i32(len(term.data)) { break }
@@ -398,36 +400,28 @@ t_handle_event :: proc(pty :^pty_t, event : sdl3.Event, term : ^Term)-> bool{
     case sdl3.EventType.KEY_DOWN:
 
         key := sdl3.GetKeyFromScancode(event.key.scancode, event.key.mod, false )
+        if event.key.scancode >= sdl3.Scancode.RIGHT && event.key.scancode <= sdl3.Scancode.UP {
 
-        #partial switch event.key.scancode{
-        
-            case sdl3.Scancode.UP:
-                seq := [?]byte{0x1b,'[','A'}
-                posix.write(pty.primary,&seq[0],3)
-                return true
-            case sdl3.Scancode.DOWN:
-                seq := [?]byte{0x1b,'[','B'}
-                posix.write(pty.primary,&seq[0],3)
-                return true
-            case sdl3.Scancode.RIGHT:
-                seq := [?]byte{0x1b,'[','C'}
-                posix.write(pty.primary,&seq[0],3)
-                return true
-            case sdl3.Scancode.LEFT:
-                seq := [?]byte{0x1b,'[','D'}
-                posix.write(pty.primary,&seq[0],3)
-                return true
-        }
-
-        if sdl3.Keymod.RCTRL in event.key.mod || sdl3.Keymod.LCTRL in event.key.mod{
+            seq := [3]byte{0x1b,'[',0}
+            #partial switch event.key.scancode {
+                case sdl3.Scancode.UP:
+                    seq[2] = 'A'
+                case sdl3.Scancode.DOWN:
+                    seq[2] = 'B'
+                case sdl3.Scancode.RIGHT:
+                    seq[2] = 'C'
+                case sdl3.Scancode.LEFT:
+                    seq[2] = 'D'
+            }
+            posix.write(pty.primary,&seq[0],3)
+        }else if sdl3.Keymod.RCTRL in event.key.mod || sdl3.Keymod.LCTRL in event.key.mod{
             key &= 0x1F
         }
         if key < 256 { 
-
             posix.write(pty.primary,cast(^byte)&key, 1)
         }else{
             fmt.println("rune : ", rune(key), " scancode : " , event.key.scancode, " mod : ", event.key.mod)
-       }
+        }
     }
     return true
 }
@@ -477,7 +471,7 @@ run :: proc(pty: ^pty_t){
                 return
             }else if n > 0{
                 redraw = true
-when DEBUG do printd(int(n))
+                printd(string(buf[:n]))
             }
 
         }
@@ -502,7 +496,7 @@ when !SHOW_ANSI_RAW {
                     continue
                 }
 }
-            
+when SHOW_ANSI_RAW do if esc_n > 0 { fmt.println(buf[i:][:esc_n]) }
                 }
 
 

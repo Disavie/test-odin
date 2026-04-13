@@ -40,11 +40,11 @@ oterm|odin-terminal,                # Terminal names
 # ----------------------
 # Screen Control / Clearing
 # ----------------------
-    clear=\E[H\E[2J,                 # Clear screen and move cursor home
+COMPLETD    clear=\E[H\E[2J,                 # Clear screen and move cursor home
     cr=\r,                           # Carriage return
     csr=\E[%i%p1%d;%p2%dr,           # Change scroll region (top/bottom)
     ed=\E[J,                          # Erase to end of screen
-    el=\E[K,                          # Erase to end of line
+COMPLETED    el=\E[K,                          # Erase to end of line
     el1=\E[1K,                        # Erase to beginning of line
     flash=\E[?5h$<100/>\E[?5l,       # Flash screen (visual bell)
     home=\E[H,                        # Cursor home
@@ -73,6 +73,7 @@ oterm|odin-terminal,                # Terminal names
 # ----------------------
 # Line & Character Editing
 # ----------------------
+=============================================== work on this 
     dch=\E[%p1%dP,                    # Delete N characters
     dch1=\E[P,                         # Delete 1 character
     il=\E[%p1%dL,                     # Insert N lines
@@ -83,20 +84,21 @@ oterm|odin-terminal,                # Terminal names
 # ----------------------
 # Text Attributes
 # ----------------------
-    dim=\E[2m,                        # Dim text
-COMPLETED--for now    rev=\E[7m,                        # Reverse video
-    ritm=\E[23m,                       # Exit italic mode
-    rmso=\E[27m,                        # Exit standout mode
-    rmul=\E[24m,                        # Exit underline mode
-    sgr0=\E(B\E[m,                     # Reset attributes
-    sitm=\E[3m,                        # Enter italic
-    smso=\E[7m,                        # Enter standout
-    smul=\E[4m,                        # Enter underline
-    bold=\E[1m,                        # Bold
+COMPLETED    dim=\E[2m,                        # Dim text
+COMPLETED    rev=\E[7m,                        # Reverse video
+COMPLETED    ritm=\E[23m,                       # Exit italic mode
+COMPLETED    rmso=\E[27m,                        # Exit standout mode
+COMPLETED    rmul=\E[24m,                        # Exit underline mode
+COMPLETED    sgr0=\E(B\E[m,                     # Reset attributes
+COMPLETED    sitm=\E[3m,                        # Enter italic
+COMPLETED    smso=\E[7m,                        # Enter standout
+COMPLETED    smul=\E[4m,                        # Enter underline
+COMPLETED    bold=\E[1m,                        # Bold
 
 # ----------------------
 # Color Setting
 # ----------------------
+ ============================= WORK ON THIS
     setaf=\E[3%p1%dm,                  # Set foreground color
     setab=\E[4%p1%dm,                  # Set background color
     setf=...,                           # Conditional foreground (complex)

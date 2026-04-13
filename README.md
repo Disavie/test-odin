@@ -5,8 +5,13 @@
 
 Below are some dev notes I am writing to myself
 --- 
+- https://pkg.odin-lang.org/core/terminal/ansi/
+^ use this going forward for things instead of what ive been doing
+
+
 fix the arrow key interactions and inline editing
 THERE IS AN ANSI COMMAND \e[1@<x> being sent to INSERT
+
 
 ```
     dch=\E[%p1%dP,                    # Delete N characters

@@ -1,4 +1,4 @@
-package testterm
+package oterm
 
 import "core:fmt"
 import posix "core:sys/posix"

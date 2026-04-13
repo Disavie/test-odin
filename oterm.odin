@@ -1,7 +1,8 @@
-package testterm
+package oterm
 
 DEBUG :: false
 SHOW_ANSI_RAW :: false
+PRINT_ANSI :: true
 
 import "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
@@ -16,12 +17,6 @@ import "core:strconv"
 when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
 when ODIN_OS == .Linux do foreign import pty "system:libutil.a"
 foreign pty {openpty :: proc(primary, secondary : ^c.int, name : [^]byte, term : ^posix.termios, ws : ^winsize_t) -> c.int ---}
-print_bytes :: proc(bytes : []byte) {for l  in bytes{fmt.print(l," ")} fmt.println()}
-
-printd_s:: proc(args : ..string) { when DEBUG do fmt.println(args)  }
-printd_i :: proc(args : ..int) { when DEBUG do fmt.println(args)  }
-printd :: proc{ printd_i , printd_s }
-
 
 
 window : ^sdl3.Window = nil
@@ -38,6 +33,8 @@ pen : Pen
 Cell :: struct {
     glyph : u8,
     surface :^sdl3.Surface,
+    dirty : bool, ///< Whether or not this has actually been written to or there is just something here
+    ///^ I had to add this bullshit because I think bash is just sending a ' ' on login
 
     row : i32,
     col : i32,
@@ -164,6 +161,10 @@ csi_with_count :: proc(num : int, cmd : rune, term : ^Term){
             
             }
 
+        case 'P':
+            idx := int(term.c_row * term.width + term.c_col)
+            tshift_right(term,idx, num)
+
     }
 }
 
@@ -249,6 +250,49 @@ parse_ansi :: proc(buf : []byte, term : ^Term) -> int {
         return n
 }
 
+tinsert :: proc(term: ^Term, cell : Cell, idx : i32){
+    term.data[idx] = cell
+    term.c_col+=1
+}
+
+tshift_left :: proc(term: ^Term, pos, count: int) -> (ok: bool) {
+    total := int(term.height * term.width)
+
+    // shift right by count, starting from the end to avoid clobbering
+    for i := total - 1; i >= pos + count; i -= 1 {
+        term.data[i] = term.data[i - count]
+        // recalculate row/col from new index position
+        term.data[i].col = i32(i) %  term.width
+        term.data[i].row = i32(i) / term.width
+    }
+
+    for i := pos; i < pos + count; i += 1 {
+        term.data[i] = {}
+    }
+
+    return true
+}
+
+
+ tshift_right :: proc(term: ^Term, pos, count: int) -> (ok: bool) {
+    total := int(term.height * term.width)
+
+    if pos + count > total { return false }
+
+    // shift left by count, starting from pos to avoid clobbering
+    for i := pos; i < total - count; i += 1 {
+        term.data[i] = term.data[i + count]
+        term.data[i].col = i32(i) % term.width
+        term.data[i].row = i32(i) / term.width
+    }
+
+    // zero out the vacated slots at the end
+    for i := total - count; i < total; i += 1 {
+        term.data[i] = {}
+    }
+
+    return true
+}   // zero out the vacated slots
 
 tdraw :: proc(term: ^Term) {
 
@@ -343,14 +387,22 @@ t_check_rune :: proc(b : byte, term : ^Term){
              sdl3.DestroySurface(raw)
         }
         idx := term.c_row * term.width + term.c_col  // derive index from cursor
-            fmt.println(cast(rune)term.data[idx].glyph)
         if idx >= i32(len(term.data)) { break }
-
+        cell : Cell = {
+            glyph = b,
+            surface = glyphs[b],
+            col = term.c_col,
+            row = term.c_row,
+            dirty = true
+        }
+        tinsert(term, cell, idx)
+/*
         term.data[idx].glyph   = b
         term.data[idx].surface = glyphs[b]
         term.data[idx].col     = term.c_col
         term.data[idx].row     = term.c_row
         term.c_col += 1
+        */
 
         if term.c_col >= term.width {
             term.c_col = 0
@@ -420,7 +472,7 @@ t_handle_event :: proc(pty :^pty_t, event : sdl3.Event, term : ^Term)-> bool{
         if key < 256 { 
             posix.write(pty.primary,cast(^byte)&key, 1)
         }else{
-            fmt.println("rune : ", rune(key), " scancode : " , event.key.scancode, " mod : ", event.key.mod)
+            //fmt.println("rune : ", rune(key), " scancode : " , event.key.scancode, " mod : ", event.key.mod)
         }
     }
     return true
@@ -456,6 +508,7 @@ run :: proc(pty: ^pty_t){
     for running{
         redraw := false
         //larger buffer size got rid of the dangling escape charcaters
+        /// this is not perfect i need to come back to this,, store buffer from next read cycle
         buf : [5096]byte
 
         // read shell output to buffer
@@ -471,7 +524,7 @@ run :: proc(pty: ^pty_t){
                 return
             }else if n > 0{
                 redraw = true
-                printd(string(buf[:n]))
+                //printd(string(buf[:n]))
             }
 
         }
@@ -489,24 +542,19 @@ run :: proc(pty: ^pty_t){
                 esc_n : int
 
 when !SHOW_ANSI_RAW {     
-
-                if buf[i] == 0x1B {
-                    esc_n = parse_ansi(buf[i+1:], &term) /// Length of the sequence excluding \0x1b
-                    i += esc_n
-                    continue
-                }
+                    if buf[i] == 0x1B {
+                        esc_n = parse_ansi(buf[i+1:], &term) /// Length of the sequence excluding \0x1b
+when PRINT_ANSI do print_raw(buf[i:][:esc_n+1])
+                        i += esc_n
+                        continue
+                    }
 }
-when SHOW_ANSI_RAW do if esc_n > 0 { fmt.println(buf[i:][:esc_n]) }
                 }
-
-
             t_check_rune(buf[i],&term)
-
             }
             tdraw(&term)
             sdl3.UpdateWindowSurface(window)
             }
-
         for sdl3.PollEvent(&ev){
             if !t_handle_event(pty,ev, &term) { return }
         }

@@ -1,4 +1,4 @@
-package testterm
+package oterm
 
 import "vendor:sdl3"
 

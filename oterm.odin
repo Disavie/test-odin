@@ -161,9 +161,14 @@ csi_with_count :: proc(num : int, cmd : rune, term : ^Term){
             
             }
 
-        case 'P':
+        case 'P': //Delete @ Index
+            idx := int(term.c_row * term.width + term.c_col)
+            tshift_left(term,idx, num)
+
+        case '@': //Insert @ Index
             idx := int(term.c_row * term.width + term.c_col)
             tshift_right(term,idx, num)
+
 
     }
 }
@@ -255,7 +260,7 @@ tinsert :: proc(term: ^Term, cell : Cell, idx : i32){
     term.c_col+=1
 }
 
-tshift_left :: proc(term: ^Term, pos, count: int) -> (ok: bool) {
+tshift_right :: proc(term: ^Term, pos, count: int) -> (ok: bool) {
     total := int(term.height * term.width)
 
     // shift right by count, starting from the end to avoid clobbering
@@ -274,7 +279,7 @@ tshift_left :: proc(term: ^Term, pos, count: int) -> (ok: bool) {
 }
 
 
- tshift_right :: proc(term: ^Term, pos, count: int) -> (ok: bool) {
+ tshift_left :: proc(term: ^Term, pos, count: int) -> (ok: bool) {
     total := int(term.height * term.width)
 
     if pos + count > total { return false }

@@ -1,6 +1,6 @@
 package oterm
 
-DEBUG :: false
+DEBUG :: true
 SHOW_ANSI_RAW :: false
 PRINT_ANSI :: true
 
@@ -161,14 +161,17 @@ csi_with_count :: proc(num : int, cmd : rune, term : ^Term){
             
             }
 
-        case 'P': //Delete @ Index
-            idx := int(term.c_row * term.width + term.c_col)
-            tshift_left(term,idx, num)
+        case 'P':
+            row_start := int(term.c_row * term.width)
+            row_end   := int((term.c_row + 1) * term.width)
+            idx       := int(term.c_row * term.width + term.c_col)
+            tshift_left(term, idx, num, row_end)
 
-        case '@': //Insert @ Index
-            idx := int(term.c_row * term.width + term.c_col)
-            tshift_right(term,idx, num)
-
+        case '@':
+            row_start := int(term.c_row * term.width)
+            row_end   := int((term.c_row + 1) * term.width)
+            idx       := int(term.c_row * term.width + term.c_col)
+            tshift_right(term, idx, num, row_end)
 
     }
 }
@@ -260,44 +263,37 @@ tinsert :: proc(term: ^Term, cell : Cell, idx : i32){
     term.c_col+=1
 }
 
-tshift_right :: proc(term: ^Term, pos, count: int) -> (ok: bool) {
-    total := int(term.height * term.width)
-
-    // shift right by count, starting from the end to avoid clobbering
-    for i := total - 1; i >= pos + count; i -= 1 {
-        term.data[i] = term.data[i - count]
-        // recalculate row/col from new index position
-        term.data[i].col = i32(i) %  term.width
-        term.data[i].row = i32(i) / term.width
-    }
-
-    for i := pos; i < pos + count; i += 1 {
-        term.data[i] = {}
-    }
-
-    return true
-}
 
 
- tshift_left :: proc(term: ^Term, pos, count: int) -> (ok: bool) {
-    total := int(term.height * term.width)
+tshift_left :: proc(term: ^Term, pos, count, bound: int) -> (ok: bool) {
+    if pos + count > bound { return false }
 
-    if pos + count > total { return false }
-
-    // shift left by count, starting from pos to avoid clobbering
-    for i := pos; i < total - count; i += 1 {
+    for i := pos; i < bound - count; i += 1 {
         term.data[i] = term.data[i + count]
         term.data[i].col = i32(i) % term.width
         term.data[i].row = i32(i) / term.width
     }
-
-    // zero out the vacated slots at the end
-    for i := total - count; i < total; i += 1 {
+    for i := bound - count; i < bound; i += 1 {
         term.data[i] = {}
     }
-
     return true
-}   // zero out the vacated slots
+}
+
+tshift_right :: proc(term: ^Term, pos, count, bound: int) -> (ok: bool) {
+    if pos + count > bound { return false }
+
+    for i := bound - 1; i >= pos + count; i -= 1 {
+        term.data[i] = term.data[i - count]
+        term.data[i].col = i32(i) % term.width
+        term.data[i].row = i32(i) / term.width
+    }
+    for i := pos; i < pos + count; i += 1 {
+        term.data[i] = {}
+    }
+    return true
+}
+
+
 
 tdraw :: proc(term: ^Term) {
 
@@ -368,12 +364,13 @@ t_check_rune :: proc(b : byte, term : ^Term){
 
     case '\n':
         term.c_row += 1
-        if term.c_row >= term.height { scroll(term) }
-        // clear the new row
-        for col: i32 = 0; col < term.width; col += 1 {
-            term.data[term.c_row * term.width + col] = {}
+        if term.c_row >= term.height {
+            scroll(term) 
+        } else {
+            for col: i32 = 0; col < term.width; col += 1 {
+                term.data[term.c_row * term.width + col] = {}
+            }
         }
-
     case '\r':
         term.c_col = 0
     case '\t':
@@ -401,13 +398,6 @@ t_check_rune :: proc(b : byte, term : ^Term){
             dirty = true
         }
         tinsert(term, cell, idx)
-/*
-        term.data[idx].glyph   = b
-        term.data[idx].surface = glyphs[b]
-        term.data[idx].col     = term.c_col
-        term.data[idx].row     = term.c_row
-        term.c_col += 1
-        */
 
         if term.c_col >= term.width {
             term.c_col = 0
@@ -438,7 +428,7 @@ t_handle_event :: proc(pty :^pty_t, event : sdl3.Event, term : ^Term)-> bool{
         data_n := make([]Cell, new_width * new_height)
 
         for cell in term.data {
-            if cell.glyph == 0 { continue }
+            if !cell.dirty { continue }
             if cell.col >= new_width || cell.row >= new_height { continue }
             idx := cell.row * new_width + cell.col
             data_n[idx] = cell
@@ -529,7 +519,7 @@ run :: proc(pty: ^pty_t){
                 return
             }else if n > 0{
                 redraw = true
-                //printd(string(buf[:n]))
+                printd(string(buf[:n]))
             }
 
         }

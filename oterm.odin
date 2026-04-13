@@ -120,6 +120,7 @@ csi_with_count :: proc(num : int, cmd : rune, term : ^Term){
     switch(cmd){
         case 'm':
             switch num { 
+                /// Set CSIMODE
                 case 0:
                     term.csi_mode = {}
                 case 1:
@@ -138,6 +139,22 @@ csi_with_count :: proc(num : int, cmd : rune, term : ^Term){
                     term.csi_mode += {.HIDDEN}
                 case 9:
                     term.csi_mode += {.STRIKETHROUGH}
+                // Reset CSIMODE
+                case 22: // these share the same reset code?
+                    term.csi_mode -= {.BOLD}
+                    term.csi_mode -= {.DIM}
+                case 23:
+                    term.csi_mode -= {.ITALIC}
+                case 24:
+                   term.csi_mode -= {.UNDERLINE}
+                case 25:
+                   term.csi_mode -= {.BLINKING}
+                case 27:
+                    term.csi_mode -= {.INVERSE}
+                case 28:
+                    term.csi_mode -= {.HIDDEN}
+                case 29:
+                    term.csi_mode -= {.STRIKETHROUGH}
             }
         case 'J':
             switch (num) {

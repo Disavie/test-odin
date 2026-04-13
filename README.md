@@ -1,3 +1,12 @@
+# OTerm is a terminal emulator written in Odin
+
+> Motivation :
+> Love of the game and I wanted to learn a new language
+
+Below are some dev notes I am writing to myself
+--- 
+
+
 i dont need to switch to opengl with truetype , just switch from blitting to using a textrenderer in sdl, basically same thingggggggggg
 also work on cursor movemnet
 also work on how do i want to parse csi codes with multiple args that are ; separated? -> look online @ what other people have done probs

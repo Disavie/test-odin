@@ -334,8 +334,6 @@ t_check_rune :: proc(b : byte, term : ^Term){
                ///  bash sends a \b AND a \e[K which signals to delete
         if term.c_col > 0 { 
             term.c_col -= 1
-            //idx := term.c_row * term.width + term.c_col
-            //term.data[idx] = {}  // clear the cell
         }
     case 0x07: 
         ;
@@ -346,12 +344,15 @@ t_check_rune :: proc(b : byte, term : ^Term){
              sdl3.DestroySurface(raw)
         }
         idx := term.c_row * term.width + term.c_col  // derive index from cursor
+            fmt.println(cast(rune)term.data[idx].glyph)
         if idx >= i32(len(term.data)) { break }
+
         term.data[idx].glyph   = b
         term.data[idx].surface = glyphs[b]
         term.data[idx].col     = term.c_col
         term.data[idx].row     = term.c_row
         term.c_col += 1
+
         if term.c_col >= term.width {
             term.c_col = 0
             term.c_row += 1

@@ -169,10 +169,6 @@ csi_with_count :: proc(num : int, cmd : rune, term : ^Term){
 handle_csi :: proc(buf : []byte, term : ^Term) -> int{
     seq_len : int = 0
     
-   // if strings.contains(string(cstring(&buf[0])), "H") do csi_home(term)
-   // if strings.contains(string(cstring(&buf[0])), "2J") do csi_clear(term)
-
-
     for b in buf{
 
         seq_len += 1
@@ -403,12 +399,35 @@ t_handle_event :: proc(pty :^pty_t, event : sdl3.Event, term : ^Term)-> bool{
 
         key := sdl3.GetKeyFromScancode(event.key.scancode, event.key.mod, false )
 
+        #partial switch event.key.scancode{
+        
+            case sdl3.Scancode.UP:
+                seq := [?]byte{0x1b,'[','A'}
+                posix.write(pty.primary,&seq[0],3)
+                return true
+            case sdl3.Scancode.DOWN:
+                seq := [?]byte{0x1b,'[','B'}
+                posix.write(pty.primary,&seq[0],3)
+                return true
+            case sdl3.Scancode.RIGHT:
+                seq := [?]byte{0x1b,'[','C'}
+                posix.write(pty.primary,&seq[0],3)
+                return true
+            case sdl3.Scancode.LEFT:
+                seq := [?]byte{0x1b,'[','D'}
+                posix.write(pty.primary,&seq[0],3)
+                return true
+        }
+
         if sdl3.Keymod.RCTRL in event.key.mod || sdl3.Keymod.LCTRL in event.key.mod{
             key &= 0x1F
         }
         if key < 256 { 
+
             posix.write(pty.primary,cast(^byte)&key, 1)
-        }
+        }else{
+            fmt.println("rune : ", rune(key), " scancode : " , event.key.scancode, " mod : ", event.key.mod)
+       }
     }
     return true
 }

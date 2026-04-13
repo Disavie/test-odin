@@ -1,6 +1,6 @@
 package testterm
 
-DEBUG :: true
+DEBUG :: false
 SHOW_ANSI_RAW :: false
 
 import "vendor:sdl3"
@@ -10,13 +10,16 @@ import posix "core:sys/posix"
 import linux "core:sys/linux"
 import "core:c"
 import "core:os"
+import "core:strings"
 
 when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
 when ODIN_OS == .Linux do foreign import pty "system:libutil.a"
 foreign pty {openpty :: proc(primary, secondary : ^c.int, name : [^]byte, term : ^posix.termios, ws : ^winsize_t) -> c.int ---}
 print_bytes :: proc(bytes : []byte) {for l  in bytes{fmt.print(l," ")} fmt.println()}
 
-printd :: proc(args : ..string) { when DEBUG do fmt.println(args)  }
+printd_s:: proc(args : ..string) { when DEBUG do fmt.println(args)  }
+printd_i :: proc(args : ..int) { when DEBUG do fmt.println(args)  }
+printd :: proc{ printd_i , printd_s }
 
 
 
@@ -64,30 +67,35 @@ pty_t :: struct {
     primary, secondary : posix.FD
 }
 
-clear :: proc() { /// This doesnt appear to clear it rn bc I need to have clear interact with term.data too
+clear :: proc(term : ^Term) {  // naive approach for now, this removed ability for scrollback
     sdl3.FillSurfaceRect(surface, nil, term_bg)
     sdl3.UpdateWindowSurface(window)
+    delete(term.data)
+    term.data = make([]Cell, term.height * term.width)
 }
 
+home :: proc(term : ^Term) {
+    fmt.println("house")
+    term.c_col = 0
+    term.c_row = 0
+}
 
-handle_csi :: proc(buf : []byte) -> int{
+handle_csi :: proc(buf : []byte, term : ^Term) -> int{
     seq_len : int = 0
-    /*
-    if cstring(&buf[0]) == cstring("2J"){
-        clear()
-    }
-    */
+    
+    if strings.contains(string(cstring(&buf[0])), "H") do home(term)
+    if strings.contains(string(cstring(&buf[0])), "2J") do clear(term)
+
     for b in buf{
         seq_len += 1
         if b >= cast(byte)65 && b <= cast(byte)90 {break} /// A - Z
         if b >= cast(byte)97 && b <= cast(byte)122 {break} /// a - z
     }
 
-    printd(string(buf[0:seq_len]))
     return seq_len
 }
 
-handle_osc :: proc(buf : []byte) -> int{
+handle_osc :: proc(buf : []byte, term : ^Term) -> int{
 
     seq_len : int = 0
 
@@ -100,7 +108,7 @@ handle_osc :: proc(buf : []byte) -> int{
 }
 
 /// returns length of the escape sequence 
-parse_ansi :: proc(buf : []byte) -> int {
+parse_ansi :: proc(buf : []byte, term : ^Term) -> int {
 
     // Prevents crashing if I see a \033X with nothing else it will break
     if len(buf) == 0 { return 0 }
@@ -110,11 +118,11 @@ parse_ansi :: proc(buf : []byte) -> int {
 
         case '[':
             /// CSI (control sequence introducer)
-            n += handle_csi(buf[1:])
+            n += handle_csi(buf[1:], term)
             /// Ends in A-Z or a-z
         case ']':
             /// OSC
-            n += handle_osc(buf[1:])
+            n += handle_osc(buf[1:], term)
             /// Ends in 0x07 (BEL) or ST (0x9C, 0x1B, 0x5C)
 
         case '(':
@@ -336,8 +344,8 @@ run :: proc(pty: ^pty_t){
 
     for running{
         redraw := false
-
-        buf : [1024]byte
+        //larger buffer size got rid of the dangling escape charcaters
+        buf : [5096]byte
 
         // read shell output to buffer
         posix.FD_ZERO(&readable)
@@ -352,6 +360,7 @@ run :: proc(pty: ^pty_t){
                 return
             }else if n > 0{
                 redraw = true
+when DEBUG do printd(int(n))
             }
 
         }
@@ -359,17 +368,25 @@ run :: proc(pty: ^pty_t){
         //write shell output to screen
         if redraw == true {
             i : int
+            str_ref := string(cstring(&buf[0]))
+            fine_ill_handle_esc := false
+            if strings.contains_rune(str_ref, 0x1b) do fine_ill_handle_esc = true
+
             for i = 0 ; i < n ; i+=1 {
+                
+                if fine_ill_handle_esc {    
                 esc_n : int
 
 when !SHOW_ANSI_RAW {     
+
                 if buf[i] == 0x1B {
-                    esc_n = parse_ansi(buf[i+1:]) /// Length of the sequence excluding \0x1b
+                    esc_n = parse_ansi(buf[i+1:], &term) /// Length of the sequence excluding \0x1b
                     i += esc_n
                     continue
                 }
 }
             
+                }
 
 
             t_check_rune(buf[i],&term)

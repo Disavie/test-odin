@@ -1,6 +1,6 @@
 package testterm
 
-DEBUG :: false
+DEBUG :: true
 SHOW_ANSI_RAW :: false
 
 import "vendor:sdl3"
@@ -11,6 +11,7 @@ import linux "core:sys/linux"
 import "core:c"
 import "core:os"
 import "core:strings"
+import "core:strconv"
 
 when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
 when ODIN_OS == .Linux do foreign import pty "system:libutil.a"
@@ -88,7 +89,6 @@ csi_rv :: proc (term : ^Term) {
 }
 
 
-
 handle_csi :: proc(buf : []byte, term : ^Term) -> int{
     seq_len : int = 0
     
@@ -96,11 +96,16 @@ handle_csi :: proc(buf : []byte, term : ^Term) -> int{
     if strings.contains(string(cstring(&buf[0])), "2J") do csi_clear(term)
     if strings.contains(string(cstring(&buf[0])), "7m") do csi_rv(term)
 
+
     for b in buf{
+
         seq_len += 1
         if b >= cast(byte)65 && b <= cast(byte)90 {break} /// A - Z
         if b >= cast(byte)97 && b <= cast(byte)122 {break} /// a - z
     }
+    /// -1 to strip off the trailing [A-z]
+    num, ok := strconv.parse_int(strings.string_from_ptr(&buf[0],seq_len-1))
+    if ok do printd(num)
 
     return seq_len
 }

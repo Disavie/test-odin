@@ -1,7 +1,7 @@
 package testterm
 
-DEBUG :: false
-SHOW_ANSI_RAW :: true
+DEBUG :: true
+SHOW_ANSI_RAW :: false
 
 import "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
@@ -15,6 +15,8 @@ when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
 when ODIN_OS == .Linux do foreign import pty "system:libutil.a"
 foreign pty {openpty :: proc(primary, secondary : ^c.int, name : [^]byte, term : ^posix.termios, ws : ^winsize_t) -> c.int ---}
 print_bytes :: proc(bytes : []byte) {for l  in bytes{fmt.print(l," ")} fmt.println()}
+
+printd :: proc(args : ..string) { when DEBUG do fmt.println(args)  }
 
 
 
@@ -80,6 +82,8 @@ handle_csi :: proc(buf : []byte) -> int{
         if b >= cast(byte)65 && b <= cast(byte)90 {break} /// A - Z
         if b >= cast(byte)97 && b <= cast(byte)122 {break} /// a - z
     }
+
+    printd(string(buf[0:seq_len]))
     return seq_len
 }
 
@@ -116,10 +120,25 @@ parse_ansi :: proc(buf : []byte) -> int {
         case '(':
             /// G0 Character Set Select
             n += 1
+            if len(buf) == 1 {break}
+            switch buf[1]{
 
+                case 'B':
+                case '0':
+                case:
+                    ;
+            }
         case ')':
             /// G1 Character Set Select
             n += 1
+            if len(buf) == 1 {break}
+            switch buf[1]{
+
+                case 'B':
+                case '0':
+                case:
+                    ;
+            }
         case:
         ;
 
@@ -342,27 +361,17 @@ run :: proc(pty: ^pty_t){
             i : int
             for i = 0 ; i < n ; i+=1 {
                 esc_n : int
-            ///============= WORK ON THIS TOMORROW ====================///////////
 
-when SHOW_ANSI_RAW {               // ============================================///////
+when !SHOW_ANSI_RAW {     
                 if buf[i] == 0x1B {
-                    esc_n = parse_ansi(buf[i+1:])
-                    i+=esc_n
+                    esc_n = parse_ansi(buf[i+1:]) /// Length of the sequence excluding \0x1b
+                    i += esc_n
                     continue
                 }
 }
+            
 
 
- when DEBUG {               // ============================================///////
-for b in buf[:len(buf)] {
-    if b >= 32 && b < 127 {            // printable ASCII
-        fmt.print("%c", b)
-    } else {
-        fmt.print("\\%03o", b)         // print non-printable as octal (\033)
-    }
-}
-fmt.println()
-}
             t_check_rune(buf[i],&term)
 
             }

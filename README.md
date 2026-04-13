@@ -5,6 +5,18 @@
 
 Below are some dev notes I am writing to myself
 --- 
+fix the arrow key interactions and inline editing
+THERE IS AN ANSI COMMAND \e[1@<x> being sent to INSERT
+
+```
+    dch=\E[%p1%dP,                    # Delete N characters
+    dch1=\E[P,                         # Delete 1 character
+    il=\E[%p1%dL,                     # Insert N lines
+    il1=\E[L,                          # Insert 1 line
+    ich=\E[%p1%d@,                     # Insert N characters
+    ech=\E[%p1%dX,                     # Erase N characters
+```
+
 
 
 i dont need to switch to opengl with truetype , just switch from blitting to using a textrenderer in sdl, basically same thingggggggggg

@@ -1,6 +1,6 @@
 package testterm
 
-DEBUG :: true
+DEBUG :: false
 SHOW_ANSI_RAW :: false
 
 import "vendor:sdl3"
@@ -174,7 +174,7 @@ handle_csi :: proc(buf : []byte, term : ^Term) -> int{
     for b in buf{
 
         seq_len += 1
-        if b >= cast(byte)65 && b <= cast(byte)90 {break} /// A - Z
+        if b >= cast(byte)64 && b <= cast(byte)90 {break} /// @ - Z
         if b >= cast(byte)97 && b <= cast(byte)122 {break} /// a - z
     }
     /// -1 to strip off the trailing [A-z]
@@ -306,7 +306,6 @@ tread :: proc(pty : ^pty_t, buf : [^]byte, length : uint) -> c.ssize_t {
     n := posix.read(pty.primary, &buf[0], length)
     if n > 0 {
         buf[n] = 0
-        printd("yo")
     }else{
         fmt.println("shell closed")
         return -1

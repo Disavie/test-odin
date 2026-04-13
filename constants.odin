@@ -17,7 +17,7 @@ height :: 500
 width :: 500
 
 // Define color for the text
-color_fg := sdl3.Color{ 255, 100, 255, 00 } // white
-color_bg := sdl3.Color{ 0, 100 ,0 , 0 } 
+color_fg := sdl3.Color{ 255, 255, 255, 00 } // white
+color_bg := sdl3.Color{ 0, 0 ,0 , 0 } 
 // AA RR GG BB
 term_bg : u32 = 0x00080000  

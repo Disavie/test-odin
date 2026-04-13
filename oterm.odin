@@ -1,6 +1,7 @@
 package testterm
 
 DEBUG :: false
+SHOW_ANSI_RAW :: true
 
 import "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
@@ -8,10 +9,7 @@ import "core:fmt"
 import posix "core:sys/posix"
 import linux "core:sys/linux"
 import "core:c"
-import "core:strings"
-import "core:log"
 import "core:os"
-import  shift_map "map"
 
 when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
 when ODIN_OS == .Linux do foreign import pty "system:libutil.a"
@@ -114,6 +112,14 @@ parse_ansi :: proc(buf : []byte) -> int {
             /// OSC
             n += handle_osc(buf[1:])
             /// Ends in 0x07 (BEL) or ST (0x9C, 0x1B, 0x5C)
+
+        case '(':
+            /// G0 Character Set Select
+            n += 1
+
+        case ')':
+            /// G1 Character Set Select
+            n += 1
         case:
         ;
 
@@ -275,7 +281,7 @@ t_handle_event :: proc(pty :^pty_t, event : sdl3.Event, term : ^Term)-> bool{
         if sdl3.Keymod.RCTRL in event.key.mod || sdl3.Keymod.LCTRL in event.key.mod{
             key &= 0x1F
         }
-        if key < 256 { /// UTF-8
+        if key < 256 { 
             posix.write(pty.primary,cast(^byte)&key, 1)
         }
     }
@@ -337,11 +343,14 @@ run :: proc(pty: ^pty_t){
             for i = 0 ; i < n ; i+=1 {
                 esc_n : int
             ///============= WORK ON THIS TOMORROW ====================///////////
+
+when SHOW_ANSI_RAW {               // ============================================///////
                 if buf[i] == 0x1B {
                     esc_n = parse_ansi(buf[i+1:])
                     i+=esc_n
                     continue
                 }
+}
 
 
  when DEBUG {               // ============================================///////

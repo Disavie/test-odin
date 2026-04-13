@@ -64,13 +64,23 @@ pty_t :: struct {
     primary, secondary : posix.FD
 }
 
+clear :: proc() { /// This doesnt appear to clear it rn bc I need to have clear interact with term.data too
+    sdl3.FillSurfaceRect(surface, nil, term_bg)
+    sdl3.UpdateWindowSurface(window)
+}
+
+
 handle_csi :: proc(buf : []byte) -> int{
     seq_len : int = 0
-
+    /*
+    if cstring(&buf[0]) == cstring("2J"){
+        clear()
+    }
+    */
     for b in buf{
         seq_len += 1
-        if b >= cast(byte)65 && b <= cast(byte)90 { return seq_len } /// A - Z
-        if b >= cast(byte)97 && b <= cast(byte)122 { return seq_len } /// a - z
+        if b >= cast(byte)65 && b <= cast(byte)90 {break} /// A - Z
+        if b >= cast(byte)97 && b <= cast(byte)122 {break} /// a - z
     }
     return seq_len
 }
@@ -90,23 +100,25 @@ handle_osc :: proc(buf : []byte) -> int{
 /// returns length of the escape sequence 
 parse_ansi :: proc(buf : []byte) -> int {
 
-    // This isnt a perfect solution for example
-    // if I see a \033X with nothing else it will break
+    // Prevents crashing if I see a \033X with nothing else it will break
+    if len(buf) == 0 { return 0 }
 
+    n := 1
     switch buf[0]{
 
         case '[':
             /// CSI (control sequence introducer)
-            return 1 + handle_csi(buf[1:])
+            n += handle_csi(buf[1:])
             /// Ends in A-Z or a-z
         case ']':
             /// OSC
-            return 1 + handle_osc(buf[1:])
+            n += handle_osc(buf[1:])
             /// Ends in 0x07 (BEL) or ST (0x9C, 0x1B, 0x5C)
         case:
-            return 0
+        ;
 
     }
+        return n
 }
 
 
@@ -327,14 +339,11 @@ run :: proc(pty: ^pty_t){
             ///============= WORK ON THIS TOMORROW ====================///////////
                 if buf[i] == 0x1B {
                     esc_n = parse_ansi(buf[i+1:])
-                }
-
-                if esc_n != 0 {
-                   
-                    /// TODO : handle these
-                    i += esc_n
+                    i+=esc_n
                     continue
                 }
+
+
  when DEBUG {               // ============================================///////
 for b in buf[:len(buf)] {
     if b >= 32 && b < 127 {            // printable ASCII

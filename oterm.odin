@@ -1,9 +1,10 @@
 package oterm
 
-DEBUG :: true
+DEBUG :: false
 DEBUG_BINARY :: false
 SHOW_ANSI_RAW :: false
-PRINT_ANSI :: true
+PRINT_ANSI :: false
+PRINT_UNHANDLED_ANSI :: true
 
 import "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
@@ -13,9 +14,8 @@ import linux "core:sys/linux"
 import "core:c"
 import "core:os"
 import "core:strings"
-import "core:strconv"
 
-when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
+//when ODIN_OS == .Linux do foreign import ioctl "system:libc.a"
 when ODIN_OS == .Linux do foreign import pty "system:libutil.a"
 foreign pty {openpty :: proc(primary, secondary : ^c.int, name : [^]byte, term : ^posix.termios, ws : ^winsize_t) -> c.int ---}
 
@@ -123,7 +123,7 @@ csi_no_args :: proc(cmd : rune , term : ^Term){
             term.col-=1
             if term.col < 0 do term.col = 0
         case:
-        ;
+when PRINT_UNHANDLED_ANSI do fmt.println("Failed to handle : \\E[",cmd)
    }
 
 }
@@ -195,6 +195,8 @@ when DEBUG do fmt.println(num, " ", cmd)
                     term.csi_mode -= {.HIDDEN}
                 case 29:
                     term.csi_mode -= {.STRIKETHROUGH}
+                case:
+when PRINT_UNHANDLED_ANSI do fmt.println("Failed to handle : \\E[",args,cmd)
             }
         case 'J':
             switch (num) {
@@ -204,8 +206,6 @@ when DEBUG do fmt.println(num, " ", cmd)
 
         case 'K':
             switch (num){
-
-            
             }
 
         case 'P':
@@ -219,7 +219,8 @@ when DEBUG do fmt.println(num, " ", cmd)
             row_end   := int((term.row + 1) * term.width)
             idx       := int(term.row * term.width + term.col)
             tshift_right(term, idx, num, row_end)
-
+        case :
+when PRINT_UNHANDLED_ANSI do fmt.println("Failed to handle : \\E[",args,cmd)
     }
 }
 

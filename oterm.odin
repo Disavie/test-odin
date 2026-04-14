@@ -1,8 +1,9 @@
 package oterm
 
-DEBUG :: true
+DEBUG :: false
+DEBUG_BINARY :: true
 SHOW_ANSI_RAW :: false
-PRINT_ANSI :: true
+PRINT_ANSI :: false
 
 import "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
@@ -63,6 +64,7 @@ Term :: struct {
     ref_surface : ^sdl3.Surface,
     
     csi_mode : bit_set[CSI_MODE],
+    alt_set : bool,
 
 
 }
@@ -250,7 +252,9 @@ parse_ansi :: proc(buf : []byte, term : ^Term) -> int {
             switch buf[1]{
 
                 case 'B':
+                    term.alt_set = false
                 case '0':
+                    term.alt_set = true
                 case:
                     ;
             }
@@ -259,9 +263,10 @@ parse_ansi :: proc(buf : []byte, term : ^Term) -> int {
             n += 1
             if len(buf) == 1 {break}
             switch buf[1]{
-
                 case 'B':
+                    term.alt_set = false
                 case '0':
+                    term.alt_set = true
                 case:
                     ;
             }
@@ -320,7 +325,6 @@ tdraw :: proc(term: ^Term) {
         if cell.glyph == 0 || cell.surface == nil {
             continue
         }
-        //fmt.println(cast(rune)cell.glyph, " ", cell.col," ", cell.row)
         dest_rect := sdl3.Rect{
             x = cell.col * term.ref_rect.w,
             y = cell.row * term.ref_rect.h,
@@ -373,8 +377,7 @@ tread :: proc(pty : ^pty_t, buf : [^]byte, length : uint) -> c.ssize_t {
 }
 
 t_check_rune :: proc(b : byte, term : ^Term){
-
-    fmt.printf("%c\n", alt_map[rune(b)])
+    b := b
     switch b{
 
     case '\n':
@@ -398,6 +401,10 @@ t_check_rune :: proc(b : byte, term : ^Term){
     case 0x07: 
         ;
     case:
+
+        if term.alt_set == true {
+            b = byte(alt_map[b])
+        }
         if glyphs[b] == nil {
              raw := ttf.RenderGlyph_LCD(pen.font, cast(u32)b, pen.fg, pen.bg)
              glyphs[b] = sdl3.ConvertSurface(raw, surface.format)
@@ -534,7 +541,7 @@ run :: proc(pty: ^pty_t){
                 return
             }else if n > 0{
                 redraw = true
-                printd(string(buf[:n]))
+                //printd(string(buf[:n]))
             }
 
         }
@@ -547,7 +554,7 @@ run :: proc(pty: ^pty_t){
             if strings.contains_rune(str_ref, 0x1b) do fine_ill_handle_esc = true
 
             for i = 0 ; i < n ; i+=1 {
-                
+when DEBUG_BINARY do fmt.printf("%08b\n",buf[i])    
                 if fine_ill_handle_esc {    
                 esc_n : int
 

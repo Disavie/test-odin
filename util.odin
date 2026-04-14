@@ -18,5 +18,6 @@ print_raw :: proc( byte_arr : []byte){
 
 printd_s:: proc(args : ..string) { when DEBUG do fmt.println(args)  }
 printd_i :: proc(args : ..int) { when DEBUG do fmt.println(args)  }
-printd :: proc{ printd_i , printd_s }
+printd_b :: proc(args : ..byte) { when DEBUG do fmt.println(args)  }
+printd :: proc{ printd_i , printd_s, printd_b }
 print_bytes :: proc(bytes : []byte) {for l  in bytes{fmt.print(l," ")} fmt.println()}

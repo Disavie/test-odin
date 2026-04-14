@@ -23,7 +23,7 @@ color_bg := sdl3.Color{ 0, 0 ,0 , 0 }
 // AA RR GG BB
 term_bg : u32 = 0x00_00_00_ff  
 
-alt_map := map[rune]rune{
+alt_map := map[byte]rune{
 '`' ='◆',
 'a' ='▒',
 'b' ='␉',

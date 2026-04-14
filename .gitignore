@@ -1,5 +1,6 @@
 *.log
 *.info
 !oterm.info
+*.test
 oterm
 

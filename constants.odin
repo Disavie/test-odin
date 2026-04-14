@@ -6,7 +6,8 @@ import "vendor:sdl3"
 
 //this will eventually get moved to a config - ish file but for now they are just constants
 FONT_SIZE :: 12
-FONT :: "liberation/LiberationMono-Bold.ttf"
+FONT :: "/TTF/DejaVuSansMono.ttf"
+//FONT :: "liberation/LiberationMono.ttf"
 FONT_PATH :: "/usr/share/fonts/"+FONT
 SHELL_PATH :: cstring("/bin/bash")
 SHELL :: cstring("bash")

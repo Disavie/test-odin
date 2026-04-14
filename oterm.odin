@@ -378,6 +378,7 @@ tread :: proc(pty : ^pty_t, buf : [^]byte, length : uint) -> c.ssize_t {
 
 t_check_rune :: proc(b : rune, term : ^Term){
     b := b
+    fmt.printf("t_check_rune: U+%X col=%d row=%d\n", b, term.c_col, term.c_row)
     switch b{
 
     case '\n':
@@ -401,7 +402,6 @@ t_check_rune :: proc(b : rune, term : ^Term){
     case 0x07: 
         ;
     case:
-
         if term.alt_set == true {
             b = alt_map[b]
         }
@@ -409,6 +409,9 @@ t_check_rune :: proc(b : rune, term : ^Term){
              raw := ttf.RenderGlyph_LCD(pen.font, cast(u32)b, pen.fg, pen.bg)
              glyphs[b] = sdl3.ConvertSurface(raw, surface.format)
              sdl3.DestroySurface(raw)
+            if glyphs[b] == nil || glyphs[b].w == 0 {
+                fmt.printf("missing glyph: U+%X\n", b)
+            }
         }
         idx := term.c_row * term.width + term.c_col  // derive index from cursor
         if idx >= i32(len(term.data)) { break }
@@ -541,7 +544,7 @@ run :: proc(pty: ^pty_t){
                 return
             }else if n > 0{
                 redraw = true
-                //printd(string(buf[:n]))
+                printd(string(buf[:n]))
             }
 
         }
@@ -553,7 +556,7 @@ run :: proc(pty: ^pty_t){
             fine_ill_handle_esc := false
             if strings.contains_rune(str_ref, 0x1b) do fine_ill_handle_esc = true
 
-            for i = 0 ; i < n ; i+=1 {
+            for i = 0 ; i < n ;{
 when DEBUG_BINARY do fmt.printf("%08b\n",buf[i])    
                 if fine_ill_handle_esc {    
                 esc_n : int
@@ -562,7 +565,7 @@ when !SHOW_ANSI_RAW {
                     if buf[i] == 0x1B {
                         esc_n = parse_ansi(buf[i+1:], &term) /// Length of the sequence excluding \0x1b
 when PRINT_ANSI do print_raw(buf[i:][:esc_n+1])
-                        i += esc_n
+                        i += esc_n +1
                         continue
                     }
 }
@@ -603,8 +606,9 @@ when PRINT_ANSI do print_raw(buf[i:][:esc_n+1])
                 cp = 0xFFFD
                 size = 1
             }
-            fmt.println(cp) 
-            i += size-1
+            i += size
+
+            fmt.printf("decoded: U+%X size=%d\n", cp, size)
             t_check_rune(cp,&term)
             }
             tdraw(&term)

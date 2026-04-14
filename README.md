@@ -5,6 +5,9 @@
 
 Below are some dev notes I am writing to myself
 --- 
+
+keep working on ansi parsing,, handling cursor movement
+
 - https://pkg.odin-lang.org/core/terminal/ansi/
 ^ use this going forward for things instead of what ive been doing
 

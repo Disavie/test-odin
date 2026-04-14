@@ -60,7 +60,7 @@ Cursor :: struct {
 
 /// Structure that describes the terminal window
 Term :: struct {
-    cursor : Cursor,
+    using cursor : Cursor,
     width : i32,
     height : i32,
     data : []Cell,
@@ -94,8 +94,8 @@ csi_clear :: proc(term : ^Term) {  // naive approach for now, this removed abili
 
 csi_home :: proc(term : ^Term) {
     fmt.println("house")
-    term.cursor.col = 0
-    term.cursor.row = 0
+    term.col = 0
+    term.row = 0
 }
 
 csi_no_count :: proc(cmd : rune , term : ^Term){
@@ -103,7 +103,7 @@ csi_no_count :: proc(cmd : rune , term : ^Term){
         case 'H':
             csi_home(term)
         case 'K': ///[K or
-            idx := term.cursor.row * term.width + term.cursor.col
+            idx := term.row * term.width + term.col
             for{
                 if idx % term.width == 0 {
                     break
@@ -112,13 +112,13 @@ csi_no_count :: proc(cmd : rune , term : ^Term){
                 idx+=1
             }
         case 'A':
-            term.cursor.row+=1
+            term.row+=1
         case 'B':
-            term.cursor.row-=1
+            term.row-=1
         case 'C':
-            term.cursor.col+=1
+            term.col+=1
         case 'D':
-            term.cursor.col-=1
+            term.col-=1
         case:
         ;
    }
@@ -181,15 +181,15 @@ csi_with_count :: proc(num : int, cmd : rune, term : ^Term){
             }
 
         case 'P':
-            row_start := int(term.cursor.row * term.width)
-            row_end   := int((term.cursor.row + 1) * term.width)
-            idx       := int(term.cursor.row * term.width + term.cursor.col)
+            row_start := int(term.row * term.width)
+            row_end   := int((term.row + 1) * term.width)
+            idx       := int(term.row * term.width + term.col)
             tshift_left(term, idx, num, row_end)
 
         case '@':
-            row_start := int(term.cursor.row * term.width)
-            row_end   := int((term.cursor.row + 1) * term.width)
-            idx       := int(term.cursor.row * term.width + term.cursor.col)
+            row_start := int(term.row * term.width)
+            row_end   := int((term.row + 1) * term.width)
+            idx       := int(term.row * term.width + term.col)
             tshift_right(term, idx, num, row_end)
 
     }
@@ -282,7 +282,7 @@ parse_ansi :: proc(buf : []byte, term : ^Term) -> int {
 
 tinsert :: proc(term: ^Term, cell : Cell, idx : i32){
     term.data[idx] = cell
-    term.cursor.col+=1
+    term.col+=1
 }
 
 
@@ -319,12 +319,12 @@ tshift_right :: proc(term: ^Term, pos, count, bound: int) -> (ok: bool) {
 tdraw_cursor :: proc(term : ^Term){
 
     dest_rect := sdl3.Rect{
-        x = term.cursor.col * term.ref_rect.w,
-        y = term.cursor.row * term.ref_rect.h,
+        x = term.col * term.ref_rect.w,
+        y = term.row * term.ref_rect.h,
         w = term.ref_rect.w,
         h = term.ref_rect.h,
     }
-    sdl3.BlitSurface(term.cursor.c_surface, nil, surface, &dest_rect)
+    sdl3.BlitSurface(term.c_surface, nil, surface, &dest_rect)
 }
 
 tdraw :: proc(term: ^Term) {
@@ -364,7 +364,7 @@ scroll :: proc(term: ^Term) {
         idx := (term.height - 1) * term.width + col
         term.data[idx] = {}
     }
-    term.cursor.row = term.height - 1
+    term.row = term.height - 1
 }
 
 set_winsize :: proc(pty: ^pty_t, term: ^Term, ww: c.int, wh: c.int) {
@@ -394,22 +394,22 @@ t_check_rune :: proc(b : rune, term : ^Term){
     switch b{
 
     case '\n':
-        term.cursor.row += 1
-        if term.cursor.row >= term.height {
+        term.row += 1
+        if term.row >= term.height {
             scroll(term) 
         } else {
             for col: i32 = 0; col < term.width; col += 1 {
-                term.data[term.cursor.row * term.width + col] = {}
+                term.data[term.row * term.width + col] = {}
             }
         }
     case '\r':
-        term.cursor.col = 0
+        term.col = 0
     case '\t':
-        term.cursor.col = (term.cursor.col + TAB_WIDTH) &~ (TAB_WIDTH - 1) // snap to tab stop
+        term.col = (term.col + TAB_WIDTH) &~ (TAB_WIDTH - 1) // snap to tab stop
     case 0x08: ///< Backspace isn't actually responsible for deleting, seeing a \b is sent by bash when I send a LEFT signal
                ///  bash sends a \b AND a \e[K which signals to delete
-        if term.cursor.col > 0 { 
-            term.cursor.col -= 1
+        if term.col > 0 { 
+            term.col -= 1
         }
     case 0x07: 
         ;
@@ -422,26 +422,26 @@ t_check_rune :: proc(b : rune, term : ^Term){
              glyphs[b] = sdl3.ConvertSurface(raw, surface.format)
              sdl3.DestroySurface(raw)
         }
-        idx := term.cursor.row * term.width + term.cursor.col  // derive index from cursor
+        idx := term.row * term.width + term.col  // derive index from cursor
         if idx >= i32(len(term.data)) { break }
         cell : Cell = {
             codepoint = b,
             surface = glyphs[b],
-            col = term.cursor.col,
-            row = term.cursor.row,
+            col = term.col,
+            row = term.row,
             dirty = true
         }
         tinsert(term, cell, idx)
 
-        if term.cursor.col >= term.width {
-            term.cursor.col = 0
-            term.cursor.row += 1
-            if term.cursor.row >= term.height {
+        if term.col >= term.width {
+            term.col = 0
+            term.row += 1
+            if term.row >= term.height {
                 scroll(term)
             } else {
                 // clear the new row we just wrapped onto
                 for col: i32 = 0; col < term.width; col += 1 {
-                    term.data[term.cursor.row * term.width + col] = {}
+                    term.data[term.row * term.width + col] = {}
                 }
             }
         } 

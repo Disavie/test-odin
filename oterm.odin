@@ -374,6 +374,7 @@ tread :: proc(pty : ^pty_t, buf : [^]byte, length : uint) -> c.ssize_t {
 
 t_check_rune :: proc(b : byte, term : ^Term){
 
+    fmt.printf("%c\n", alt_map[rune(b)])
     switch b{
 
     case '\n':
@@ -625,4 +626,5 @@ main :: proc () {
 
     run(&pty)
     delete(glyphs)
+    delete(alt_map)
 }

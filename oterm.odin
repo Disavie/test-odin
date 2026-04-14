@@ -51,11 +51,16 @@ CSI_MODE :: enum u32 {
     HIDDEN          = 1 << 6,
     STRIKETHROUGH   = 1 << 7,
 }
+
+Cursor :: struct {
+    col : i32,
+    row : i32,
+    c_surface : ^sdl3.Surface,
+}
+
 /// Structure that describes the terminal window
 Term :: struct {
-
-    c_col : i32,
-    c_row : i32,
+    cursor : Cursor,
     width : i32,
     height : i32,
     data : []Cell,
@@ -65,8 +70,6 @@ Term :: struct {
     
     csi_mode : bit_set[CSI_MODE],
     alt_set : bool,
-
-
 }
 /// global
 glyphs: map[rune]^sdl3.Surface
@@ -91,8 +94,8 @@ csi_clear :: proc(term : ^Term) {  // naive approach for now, this removed abili
 
 csi_home :: proc(term : ^Term) {
     fmt.println("house")
-    term.c_col = 0
-    term.c_row = 0
+    term.cursor.col = 0
+    term.cursor.row = 0
 }
 
 csi_no_count :: proc(cmd : rune , term : ^Term){
@@ -100,7 +103,7 @@ csi_no_count :: proc(cmd : rune , term : ^Term){
         case 'H':
             csi_home(term)
         case 'K': ///[K or
-            idx := term.c_row * term.width + term.c_col
+            idx := term.cursor.row * term.width + term.cursor.col
             for{
                 if idx % term.width == 0 {
                     break
@@ -109,13 +112,13 @@ csi_no_count :: proc(cmd : rune , term : ^Term){
                 idx+=1
             }
         case 'A':
-            term.c_row+=1
+            term.cursor.row+=1
         case 'B':
-            term.c_row-=1
+            term.cursor.row-=1
         case 'C':
-            term.c_col+=1
+            term.cursor.col+=1
         case 'D':
-            term.c_col-=1
+            term.cursor.col-=1
         case:
         ;
    }
@@ -178,15 +181,15 @@ csi_with_count :: proc(num : int, cmd : rune, term : ^Term){
             }
 
         case 'P':
-            row_start := int(term.c_row * term.width)
-            row_end   := int((term.c_row + 1) * term.width)
-            idx       := int(term.c_row * term.width + term.c_col)
+            row_start := int(term.cursor.row * term.width)
+            row_end   := int((term.cursor.row + 1) * term.width)
+            idx       := int(term.cursor.row * term.width + term.cursor.col)
             tshift_left(term, idx, num, row_end)
 
         case '@':
-            row_start := int(term.c_row * term.width)
-            row_end   := int((term.c_row + 1) * term.width)
-            idx       := int(term.c_row * term.width + term.c_col)
+            row_start := int(term.cursor.row * term.width)
+            row_end   := int((term.cursor.row + 1) * term.width)
+            idx       := int(term.cursor.row * term.width + term.cursor.col)
             tshift_right(term, idx, num, row_end)
 
     }
@@ -279,7 +282,7 @@ parse_ansi :: proc(buf : []byte, term : ^Term) -> int {
 
 tinsert :: proc(term: ^Term, cell : Cell, idx : i32){
     term.data[idx] = cell
-    term.c_col+=1
+    term.cursor.col+=1
 }
 
 
@@ -313,6 +316,16 @@ tshift_right :: proc(term: ^Term, pos, count, bound: int) -> (ok: bool) {
 }
 
 
+tdraw_cursor :: proc(term : ^Term){
+
+    dest_rect := sdl3.Rect{
+        x = term.cursor.col * term.ref_rect.w,
+        y = term.cursor.row * term.ref_rect.h,
+        w = term.ref_rect.w,
+        h = term.ref_rect.h,
+    }
+    sdl3.BlitSurface(term.cursor.c_surface, nil, surface, &dest_rect)
+}
 
 tdraw :: proc(term: ^Term) {
 
@@ -351,7 +364,7 @@ scroll :: proc(term: ^Term) {
         idx := (term.height - 1) * term.width + col
         term.data[idx] = {}
     }
-    term.c_row = term.height - 1
+    term.cursor.row = term.height - 1
 }
 
 set_winsize :: proc(pty: ^pty_t, term: ^Term, ww: c.int, wh: c.int) {
@@ -378,26 +391,25 @@ tread :: proc(pty : ^pty_t, buf : [^]byte, length : uint) -> c.ssize_t {
 
 t_check_rune :: proc(b : rune, term : ^Term){
     b := b
-    fmt.printf("t_check_rune: U+%X col=%d row=%d\n", b, term.c_col, term.c_row)
     switch b{
 
     case '\n':
-        term.c_row += 1
-        if term.c_row >= term.height {
+        term.cursor.row += 1
+        if term.cursor.row >= term.height {
             scroll(term) 
         } else {
             for col: i32 = 0; col < term.width; col += 1 {
-                term.data[term.c_row * term.width + col] = {}
+                term.data[term.cursor.row * term.width + col] = {}
             }
         }
     case '\r':
-        term.c_col = 0
+        term.cursor.col = 0
     case '\t':
-        term.c_col = (term.c_col + TAB_WIDTH) &~ (TAB_WIDTH - 1) // snap to tab stop
+        term.cursor.col = (term.cursor.col + TAB_WIDTH) &~ (TAB_WIDTH - 1) // snap to tab stop
     case 0x08: ///< Backspace isn't actually responsible for deleting, seeing a \b is sent by bash when I send a LEFT signal
                ///  bash sends a \b AND a \e[K which signals to delete
-        if term.c_col > 0 { 
-            term.c_col -= 1
+        if term.cursor.col > 0 { 
+            term.cursor.col -= 1
         }
     case 0x07: 
         ;
@@ -409,30 +421,27 @@ t_check_rune :: proc(b : rune, term : ^Term){
              raw := ttf.RenderGlyph_LCD(pen.font, cast(u32)b, pen.fg, pen.bg)
              glyphs[b] = sdl3.ConvertSurface(raw, surface.format)
              sdl3.DestroySurface(raw)
-            if glyphs[b] == nil || glyphs[b].w == 0 {
-                fmt.printf("missing glyph: U+%X\n", b)
-            }
         }
-        idx := term.c_row * term.width + term.c_col  // derive index from cursor
+        idx := term.cursor.row * term.width + term.cursor.col  // derive index from cursor
         if idx >= i32(len(term.data)) { break }
         cell : Cell = {
             codepoint = b,
             surface = glyphs[b],
-            col = term.c_col,
-            row = term.c_row,
+            col = term.cursor.col,
+            row = term.cursor.row,
             dirty = true
         }
         tinsert(term, cell, idx)
 
-        if term.c_col >= term.width {
-            term.c_col = 0
-            term.c_row += 1
-            if term.c_row >= term.height {
+        if term.cursor.col >= term.width {
+            term.cursor.col = 0
+            term.cursor.row += 1
+            if term.cursor.row >= term.height {
                 scroll(term)
             } else {
                 // clear the new row we just wrapped onto
                 for col: i32 = 0; col < term.width; col += 1 {
-                    term.data[term.c_row * term.width + col] = {}
+                    term.data[term.cursor.row * term.width + col] = {}
                 }
             }
         } 
@@ -509,13 +518,21 @@ run :: proc(pty: ^pty_t){
 
     ref_surface := ttf.RenderGlyph_LCD(pen.font, cast(u32)'a', pen.fg, pen.bg)
     ref_rect := sdl3.Rect{ x = 0, y = 0, w =ref_surface.w, h = ref_surface.h }
+    
+    raw := ttf.RenderGlyph_LCD(pen.font, ' ', pen.fg, pen.fg)
+    c_surf := sdl3.ConvertSurface(raw, surface.format)
+    sdl3.DestroySurface(raw)
 
+
+    cursor := Cursor { 
+        col = 0,
+        row = 0,
+        c_surface = c_surf
+    }
     term := Term{
-        c_col = 0,
-        c_row = 0,
+        cursor = cursor,
         width = (i32(ww) / ref_rect.w),
         height = (i32(wh) / ref_rect.h),
-
 
         ref_rect = &ref_rect,
         ref_surface = ref_surface,
@@ -546,73 +563,69 @@ run :: proc(pty: ^pty_t){
                 redraw = true
                 printd(string(buf[:n]))
             }
-
         }
-
         //write shell output to screen
         if redraw == true {
             i : int
             str_ref := string(cstring(&buf[0]))
             fine_ill_handle_esc := false
             if strings.contains_rune(str_ref, 0x1b) do fine_ill_handle_esc = true
-
-            for i = 0 ; i < n ;{
+                for i = 0 ; i < n ; i+=1 {
 when DEBUG_BINARY do fmt.printf("%08b\n",buf[i])    
-                if fine_ill_handle_esc {    
-                esc_n : int
+                    if fine_ill_handle_esc {    
+                    esc_n : int
 
 when !SHOW_ANSI_RAW {     
-                    if buf[i] == 0x1B {
-                        esc_n = parse_ansi(buf[i+1:], &term) /// Length of the sequence excluding \0x1b
+                        if buf[i] == 0x1B {
+                            esc_n = parse_ansi(buf[i+1:], &term) /// Length of the sequence excluding \0x1b
 when PRINT_ANSI do print_raw(buf[i:][:esc_n+1])
-                        i += esc_n +1
-                        continue
-                    }
+                            i += esc_n
+                            continue
+                        }
 }
+                    }
+                cp : rune
+                size : int
+                    b := buf[i]
+
+                    switch {
+                        case b&0x80 == 0:
+                            // 1-byte ASCII
+                            cp = rune(b)
+                            size = 1
+
+                        case b&0xE0 == 0xC0:
+                            // 2-byte
+                            cp = rune(b&0x1F)<<6 |
+                                 rune(buf[i+1]&0x3F)
+                            size = 2
+
+                        case b&0xF0 == 0xE0:
+                            // 3-byte
+                            cp = rune(b&0x0F)<<12 |
+                                 rune(buf[i+1]&0x3F)<<6 |
+                                 rune(buf[i+2]&0x3F)
+                            size = 3
+
+                        case b&0xF8 == 0xF0:
+                            // 4-byte
+                            cp = rune(b&0x07)<<18 |
+                                 rune(buf[i+1]&0x3F)<<12 |
+                                 rune(buf[i+2]&0x3F)<<6 |
+                                 rune(buf[i+3]&0x3F)
+                            size = 4
+
+                        case:
+                            fmt.println("Bad unicode dawg")
+                            cp = 0xFFFD
+                            size = 1
+                    }
+                    i += size-1
+                    t_check_rune(cp,&term)
                 }
-            cp : rune
-            size : int
-            b := buf[i]
-
-            switch {
-            case b&0x80 == 0:
-                // 1-byte ASCII
-                cp = rune(b)
-                size = 1
-
-            case b&0xE0 == 0xC0:
-                // 2-byte
-                cp = rune(b&0x1F)<<6 |
-                     rune(buf[i+1]&0x3F)
-                size = 2
-
-            case b&0xF0 == 0xE0:
-                // 3-byte
-                cp = rune(b&0x0F)<<12 |
-                     rune(buf[i+1]&0x3F)<<6 |
-                     rune(buf[i+2]&0x3F)
-                size = 3
-
-            case b&0xF8 == 0xF0:
-                // 4-byte
-                cp = rune(b&0x07)<<18 |
-                     rune(buf[i+1]&0x3F)<<12 |
-                     rune(buf[i+2]&0x3F)<<6 |
-                     rune(buf[i+3]&0x3F)
-                size = 4
-
-            case:
-                fmt.println("Bad unicode dawg")
-                cp = 0xFFFD
-                size = 1
-            }
-            i += size
-
-            fmt.printf("decoded: U+%X size=%d\n", cp, size)
-            t_check_rune(cp,&term)
-            }
-            tdraw(&term)
-            sdl3.UpdateWindowSurface(window)
+                tdraw(&term)
+                tdraw_cursor(&term)
+                sdl3.UpdateWindowSurface(window)
             }
         for sdl3.PollEvent(&ev){
             if !t_handle_event(pty,ev, &term) { return }

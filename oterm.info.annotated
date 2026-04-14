@@ -41,13 +41,13 @@ oterm|odin-terminal,                # Terminal names
 # Screen Control / Clearing
 # ----------------------
 COMPLETD    clear=\E[H\E[2J,                 # Clear screen and move cursor home
-    cr=\r,                           # Carriage return
+DONE    cr=\r,                           # Carriage return
     csr=\E[%i%p1%d;%p2%dr,           # Change scroll region (top/bottom)
-    ed=\E[J,                          # Erase to end of screen
+DONE    ed=\E[J,                          # Erase to end of screen
 COMPLETED    el=\E[K,                          # Erase to end of line
     el1=\E[1K,                        # Erase to beginning of line
     flash=\E[?5h$<100/>\E[?5l,       # Flash screen (visual bell)
-    home=\E[H,                        # Cursor home
+DONE    home=\E[H,                        # Cursor home
     ind=\n,                            # Line feed
     indn=\E[%p1%dS,                    # Scroll forward N lines
     ri=\EM,                            # Scroll backward 1 line
@@ -56,17 +56,21 @@ COMPLETED    el=\E[K,                          # Erase to end of line
 # ----------------------
 # Cursor Movement
 # ----------------------
-    cub=\E[%p1%dD,                    # Move cursor left N columns
-    cub1=^H,                           # Move cursor left 1 column
-    cuf=\E[%p1%dC,                    # Move cursor right N columns
-    cuf1=\E[C,                         # Move cursor right 1 column
-    cud=\E[%p1%dB,                    # Move cursor down N lines
-    cud1=\n,                            # Move cursor down 1 line
-    cuu=\E[%p1%dA,                    # Move cursor up N lines
-    cuu1=\E[A,                          # Move cursor up 1 line
-    cup=\E[%i%p1%d;%p2%dH,            # Move cursor to row/column
-    hpa=\E[%i%p1%dG,                  # Move cursor to horizontal position
-    vpa=\E[%i%p1%dd,                  # Move cursor to vertical position
+DONE    cub=\E[%p1%dD,                    # Move cursor left N columns
+DONE    cub1=^H,                           # Move cursor left 1 column
+DONE    cuf=\E[%p1%dC,                    # Move cursor right N columns
+DONE    cuf1=\E[C,                         # Move cursor right 1 column
+DONE    cud=\E[%p1%dB,                    # Move cursor down N lines
+DONE    cud1=\n,                            # Move cursor down 1 line
+DONE    cuu=\E[%p1%dA,                    # Move cursor up N lines
+DONE    cuu1=\E[A,                          # Move cursor up 1 line
+
+DONE    cup=\E[%i%p1%d;%p2%dH,            # Move cursor to row/column
+DONE    /// there is also \E[x;yf
+DONE    hpa=\E[%i%p1%dG,                  # Move cursor to horizontal position
+DONE    vpa=\E[%i%p1%dd,                  # Move cursor to vertical position
+
+
     sc=\E7,                            # Save cursor position
     rc=\E8,                            # Restore cursor position
 
@@ -78,7 +82,7 @@ COMPLETED    el=\E[K,                          # Erase to end of line
     dch1=\E[P,                         # Delete 1 character
     il=\E[%p1%dL,                     # Insert N lines
     il1=\E[L,                          # Insert 1 line
-    ich=\E[%p1%d@,                     # Insert N characters
+DONE    ich=\E[%p1%d@,                     # Insert N characters
     ech=\E[%p1%dX,                     # Erase N characters
 
 # ----------------------

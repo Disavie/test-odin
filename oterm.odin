@@ -1,9 +1,9 @@
 package oterm
 
-DEBUG :: false
+DEBUG :: true
 DEBUG_BINARY :: false
 SHOW_ANSI_RAW :: false
-PRINT_ANSI :: false
+PRINT_ANSI :: true
 
 import "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
@@ -93,12 +93,11 @@ csi_clear :: proc(term : ^Term) {  // naive approach for now, this removed abili
 }
 
 csi_home :: proc(term : ^Term) {
-    fmt.println("house")
     term.col = 0
     term.row = 0
 }
 
-csi_no_count :: proc(cmd : rune , term : ^Term){
+csi_no_args :: proc(cmd : rune , term : ^Term){
    switch(cmd){
         case 'H':
             csi_home(term)
@@ -113,23 +112,52 @@ csi_no_count :: proc(cmd : rune , term : ^Term){
             }
         case 'A':
             term.row+=1
+            if term.row > term.height do term.row = term.height
         case 'B':
             term.row-=1
+            if term.row < 0 do term.row = 0
         case 'C':
             term.col+=1
+            if term.col > term.width do term.col = term.width
         case 'D':
             term.col-=1
+            if term.col < 0 do term.col = 0
         case:
         ;
    }
 
 }
-csi_reset :: proc(){
-    //todo
-}
 
-csi_with_count :: proc(num : int, cmd : rune, term : ^Term){
+csi_with_args :: proc(args : []int, cmd : rune, term : ^Term){
+
+when DEBUG do fmt.printf("term.col = %d, term.row = %d, term.height = %d, term.width = %d, \n",  term.col, term.row, term.width, term.height)
+
+    num := args[0]
+when DEBUG do fmt.println(num, " ", cmd)
     switch(cmd){
+        case 'A':
+            term.row+=i32(num)
+            if term.row > term.height do term.row = term.height
+        case 'B':
+            term.row-=i32(num)
+            if term.row < 0 do term.row = 0
+        case 'C':
+            term.col+=i32(num)
+            if term.col > term.width do term.col = term.width
+        case 'D':
+            term.col-=i32(num)
+            if term.col < 0 do term.col = 0
+        case 'f':
+            fallthrough
+        case 'H':
+            term.row = i32(args[0])
+            if len(args) == 1 do term.col = 0
+            else do term.col = i32(args[1])
+        case 'G':
+           term.col = i32(args[0])
+        case 'd':
+            term.row = i32(args[0])
+
         case 'm':
             switch num { 
                 /// Set CSIMODE
@@ -198,21 +226,31 @@ csi_with_count :: proc(num : int, cmd : rune, term : ^Term){
 
 handle_csi :: proc(buf : []byte, term : ^Term) -> int{
     seq_len : int = 0
-    
+    args : [dynamic]int
+    defer delete(args)
+    cur_num := 0
     for b in buf{
-
         seq_len += 1
+
+        if b >= 0x30 && b < 0x39 { // is a digit
+            cur_num*=10
+            cur_num += int(b - '0')
+        }
+
+        if b == ';'{
+            append_elem(&args, cur_num)
+            cur_num = 0
+
+        }
         if b >= cast(byte)64 && b <= cast(byte)90 {break} /// @ - Z
         if b >= cast(byte)97 && b <= cast(byte)122 {break} /// a - z
     }
-    /// -1 to strip off the trailing [A-z]
-    num, ok := strconv.parse_int(strings.string_from_ptr(&buf[0],seq_len-1))
-    //fmt.println("THE NUM IS: ", num, "AND THE COMMAND IS", rune(buf[seq_len-1]))
-    if !ok { 
-        csi_no_count(rune(buf[seq_len-1]), term) 
-
+    if cur_num != 0 do append_elem(&args, cur_num)
+//when DEBUG do fmt.println(buf[:seq_len])
+    if len(args) != 0{ 
+        csi_with_args(args[:], rune(buf[seq_len-1]), term)
     }else{
-        csi_with_count(num, rune(buf[seq_len-1]), term)
+        csi_no_args(rune(buf[seq_len-1]), term) 
     }
 
     return seq_len 
@@ -431,7 +469,9 @@ t_check_rune :: proc(b : rune, term : ^Term){
             row = term.row,
             dirty = true
         }
+//when DEBUG do fmt.printf("idx = [%d], term.col = %d, term.row = %d, term.height = %d, term.width = %d, \n", idx, term.col, term.row, term.width, term.height)
         tinsert(term, cell, idx)
+//when DEBUG do fmt.println("out")
 
         if term.col >= term.width {
             term.col = 0
@@ -561,7 +601,7 @@ run :: proc(pty: ^pty_t){
                 return
             }else if n > 0{
                 redraw = true
-                printd(string(buf[:n]))
+//                printd(string(buf[:n]))
             }
         }
         //write shell output to screen
@@ -620,6 +660,7 @@ when PRINT_ANSI do print_raw(buf[i:][:esc_n+1])
                             cp = 0xFFFD
                             size = 1
                     }
+
                     i += size-1
                     t_check_rune(cp,&term)
                 }

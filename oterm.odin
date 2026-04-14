@@ -104,7 +104,7 @@ csi_no_args :: proc(cmd : rune , term : ^Term){
         case 'K': ///[K or
             idx := term.row * term.width + term.col
             for{
-                if idx % term.width == 0 {
+                if idx > term.width {
                     break
                 }
                 term.data[idx] = {}  // clear the cell

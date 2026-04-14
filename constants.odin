@@ -22,7 +22,7 @@ width :: 500
 color_fg := sdl3.Color{ 255, 255, 255, 00 } // white
 color_bg := sdl3.Color{ 0, 0 ,0 , 0 } 
 // AA RR GG BB
-term_bg : u32 = 0x00_00_00_ff  
+term_bg : u32 = 0x00_00_00_00  
 
 alt_map := map[rune]rune{
 '`' ='◆',

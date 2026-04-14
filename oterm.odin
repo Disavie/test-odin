@@ -1,7 +1,7 @@
 package oterm
 
 DEBUG :: false
-DEBUG_BINARY :: true
+DEBUG_BINARY :: false
 SHOW_ANSI_RAW :: false
 PRINT_ANSI :: false
 
@@ -32,7 +32,7 @@ Pen :: struct {
 pen : Pen
 
 Cell :: struct {
-    glyph : u8,
+    codepoint : rune,
     surface :^sdl3.Surface,
     dirty : bool, ///< Whether or not this has actually been written to or there is just something here
     ///^ I had to add this bullshit because I think bash is just sending a ' ' on login
@@ -69,7 +69,7 @@ Term :: struct {
 
 }
 /// global
-glyphs: map[u8]^sdl3.Surface
+glyphs: map[rune]^sdl3.Surface
 
 winsize_t ::struct {
     row : u16,
@@ -322,7 +322,7 @@ tdraw :: proc(term: ^Term) {
 
     for i: i32 = 0; i < length; i += 1 {
         cell := term.data[i]
-        if cell.glyph == 0 || cell.surface == nil {
+        if cell.codepoint == 0 || cell.surface == nil {
             continue
         }
         dest_rect := sdl3.Rect{
@@ -376,7 +376,7 @@ tread :: proc(pty : ^pty_t, buf : [^]byte, length : uint) -> c.ssize_t {
     return n
 }
 
-t_check_rune :: proc(b : byte, term : ^Term){
+t_check_rune :: proc(b : rune, term : ^Term){
     b := b
     switch b{
 
@@ -403,7 +403,7 @@ t_check_rune :: proc(b : byte, term : ^Term){
     case:
 
         if term.alt_set == true {
-            b = byte(alt_map[b])
+            b = alt_map[b]
         }
         if glyphs[b] == nil {
              raw := ttf.RenderGlyph_LCD(pen.font, cast(u32)b, pen.fg, pen.bg)
@@ -413,7 +413,7 @@ t_check_rune :: proc(b : byte, term : ^Term){
         idx := term.c_row * term.width + term.c_col  // derive index from cursor
         if idx >= i32(len(term.data)) { break }
         cell : Cell = {
-            glyph = b,
+            codepoint = b,
             surface = glyphs[b],
             col = term.c_col,
             row = term.c_row,
@@ -567,7 +567,45 @@ when PRINT_ANSI do print_raw(buf[i:][:esc_n+1])
                     }
 }
                 }
-            t_check_rune(buf[i],&term)
+            cp : rune
+            size : int
+            b := buf[i]
+
+            switch {
+            case b&0x80 == 0:
+                // 1-byte ASCII
+                cp = rune(b)
+                size = 1
+
+            case b&0xE0 == 0xC0:
+                // 2-byte
+                cp = rune(b&0x1F)<<6 |
+                     rune(buf[i+1]&0x3F)
+                size = 2
+
+            case b&0xF0 == 0xE0:
+                // 3-byte
+                cp = rune(b&0x0F)<<12 |
+                     rune(buf[i+1]&0x3F)<<6 |
+                     rune(buf[i+2]&0x3F)
+                size = 3
+
+            case b&0xF8 == 0xF0:
+                // 4-byte
+                cp = rune(b&0x07)<<18 |
+                     rune(buf[i+1]&0x3F)<<12 |
+                     rune(buf[i+2]&0x3F)<<6 |
+                     rune(buf[i+3]&0x3F)
+                size = 4
+
+            case:
+                fmt.println("Bad unicode dawg")
+                cp = 0xFFFD
+                size = 1
+            }
+            fmt.println(cp) 
+            i += size-1
+            t_check_rune(cp,&term)
             }
             tdraw(&term)
             sdl3.UpdateWindowSurface(window)

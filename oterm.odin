@@ -1,10 +1,10 @@
 package oterm
 
-DEBUG :: false
+DEBUG :: true
 DEBUG_BINARY :: false
 SHOW_ANSI_RAW :: false
-PRINT_ANSI :: false
-PRINT_UNHANDLED_ANSI :: true
+PRINT_ANSI :: true
+PRINT_UNHANDLED_ANSI :: false
 
 import "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
@@ -85,6 +85,12 @@ pty_t :: struct {
     primary, secondary : posix.FD
 }
 
+c_clamp :: proc(x, min, max: i32) -> i32 {
+    if x < min do return min
+    if x > max do return max
+    return x
+}
+
 csi_clear :: proc(term : ^Term) {  // naive approach for now, this removed ability for scrollback
     sdl3.FillSurfaceRect(surface, nil, terminal_background)
     sdl3.UpdateWindowSurface(window)
@@ -102,11 +108,17 @@ csi_no_args :: proc(cmd : rune , term : ^Term){
         case 'H':
             csi_home(term)
         case 'K': ///[K or
-            idx := term.row * term.width + term.col
-            for{
-                if idx > term.width {
-                    break
-                }
+            
+            r_start := term.row * term.width
+            r_end := r_start + term.width
+
+            idx := r_start + term.col
+
+if idx < 0 || idx >= i32(len(term.data)) {
+when DEBUG do fmt.println(" rs = %d , re = %d, idx = %d" , r_start  , r_end , idx) 
+when DEBUG do fmt.printf("term.col = %d, term.row = %d, term.height = %d, term.width = %d, \n",  term.col, term.row, term.width, term.height)
+}
+            for idx < r_end{
                 term.data[idx] = {}  // clear the cell
                 idx+=1
             }
@@ -150,6 +162,7 @@ when DEBUG do fmt.println(num, " ", cmd)
         case 'f':
             fallthrough
         case 'H':
+
             term.row = i32(args[0])
             if len(args) == 1 do term.col = 0
             else do term.col = i32(args[1])
@@ -253,6 +266,9 @@ handle_csi :: proc(buf : []byte, term : ^Term) -> int{
     }else{
         csi_no_args(rune(buf[seq_len-1]), term) 
     }
+    /// Fix the cursor position
+    term.row = c_clamp(term.row, 0, term.height - 1)
+    term.col = c_clamp(term.col, 0, term.width  - 1)
 
     return seq_len 
 

@@ -3,8 +3,8 @@ package oterm
 DEBUG :: true
 DEBUG_BINARY :: false
 SHOW_ANSI_RAW :: false
-PRINT_ANSI :: false
-PRINT_UNHANDLED_ANSI :: true
+PRINT_ANSI :: true
+PRINT_UNHANDLED_ANSI :: false
 
 import "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
@@ -115,17 +115,17 @@ csi_no_args :: proc(cmd : rune , term : ^Term){
             idx := r_start + term.col
 
 if idx < 0 || idx >= i32(len(term.data)) {
-when DEBUG do fmt.println(" rs = %d , re = %d, idx = %d" , r_start  , r_end , idx) 
-when DEBUG do fmt.printf("term.col = %d, term.row = %d, term.height = %d, term.width = %d, \n",  term.col, term.row, term.width, term.height)
+//when DEBUG do fmt.println(" rs = %d , re = %d, idx = %d" , r_start  , r_end , idx) 
+//when DEBUG do fmt.printf("term.col = %d, term.row = %d, term.height = %d, term.width = %d, \n",  term.col, term.row, term.width, term.height)
 }
             for idx < r_end{
                 term.data[idx] = {}  // clear the cell
                 idx+=1
             }
         case 'A':
-            term.row+=1
-        case 'B':
             term.row-=1
+        case 'B':
+            term.row+=1
         case 'C':
             term.col+=1
         case 'D':
@@ -138,15 +138,14 @@ when PRINT_UNHANDLED_ANSI do fmt.println("Failed to handle : \\E[",cmd)
 
 csi_with_args :: proc(args : []int, cmd : rune, term : ^Term){
 
-when DEBUG do fmt.printf("term.col = %d, term.row = %d, term.height = %d, term.width = %d, \n",  term.col, term.row, term.width, term.height)
+//when DEBUG do fmt.printf("term.col = %d, term.row = %d, term.height = %d, term.width = %d, \n",  term.col, term.row, term.width, term.height)
 
     num := args[0]
-when DEBUG do fmt.println(num, " ", cmd)
     switch(cmd){
         case 'A':
-            term.row+=i32(num)
-        case 'B':
             term.row-=i32(num)
+        case 'B':
+            term.row+=i32(num)
         case 'C':
             term.col+=i32(num)
         case 'D':
@@ -155,13 +154,16 @@ when DEBUG do fmt.println(num, " ", cmd)
             fallthrough
         case 'H':
 
-            term.row = i32(args[0])
-            if len(args) == 1 do term.col = 0
-            else do term.col = i32(args[1])
+            term.row = i32(args[0] - 1)
+            if len(args) == 1 {
+                 term.col = 0
+             } else {
+                 term.col = i32(args[1] - 1)
+             }
         case 'G':
-           term.col = i32(args[0])
+           term.col = i32(args[0] - 1)
         case 'd':
-            term.row = i32(args[0])
+            term.row = i32(args[0] - 1) 
 
         case 'm':
             switch num { 
@@ -238,7 +240,7 @@ handle_csi :: proc(buf : []byte, term : ^Term) -> int{
     for b in buf{
         seq_len += 1
 
-        if b >= 0x30 && b < 0x39 { // is a digit
+        if b >= 0x30 && b <= 0x39 { // is a digit
             cur_num*=10
             cur_num += int(b - '0')
         }
@@ -446,10 +448,6 @@ t_check_rune :: proc(b : rune, term : ^Term){
         term.row += 1
         if term.row >= term.height {
             scroll(term) 
-        } else {
-            for col: i32 = 0; col < term.width; col += 1 {
-                term.data[term.row * term.width + col] = {}
-            }
         }
     case '\r':
         term.col = 0
@@ -599,7 +597,7 @@ run :: proc(pty: ^pty_t){
         redraw := false
         //larger buffer size got rid of the dangling escape charcaters
         /// this is not perfect i need to come back to this,, store buffer from next read cycle
-        buf : [5096]byte
+        buf : [8192]byte
 
         // read shell output to buffer
         posix.FD_ZERO(&readable)
@@ -612,13 +610,12 @@ run :: proc(pty: ^pty_t){
             n = tread(pty,&buf[0],len(buf-1))
             if n == -1 {
                 return
-            }else if n > 0{
-                redraw = true
             }
         }
-        i : int
         str_ref := string(cstring(&buf[0]))
+when DEBUG do if len(str_ref) > 0 do printd(str_ref)
         fine_ill_handle_esc := false
+        i : int
         if strings.contains_rune(str_ref, 0x1b) do fine_ill_handle_esc = true
             for i = 0 ; i < n ; i+=1 {
 when DEBUG_BINARY do fmt.printf("%08b\n",buf[i])    

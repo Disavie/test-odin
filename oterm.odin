@@ -3,8 +3,8 @@ package oterm
 DEBUG :: true
 DEBUG_BINARY :: false
 SHOW_ANSI_RAW :: false
-PRINT_ANSI :: true
-PRINT_UNHANDLED_ANSI :: false
+PRINT_ANSI :: false
+PRINT_UNHANDLED_ANSI :: true
 
 import "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
@@ -124,16 +124,12 @@ when DEBUG do fmt.printf("term.col = %d, term.row = %d, term.height = %d, term.w
             }
         case 'A':
             term.row+=1
-            if term.row > term.height do term.row = term.height
         case 'B':
             term.row-=1
-            if term.row < 0 do term.row = 0
         case 'C':
             term.col+=1
-            if term.col > term.width do term.col = term.width
         case 'D':
             term.col-=1
-            if term.col < 0 do term.col = 0
         case:
 when PRINT_UNHANDLED_ANSI do fmt.println("Failed to handle : \\E[",cmd)
    }
@@ -149,16 +145,12 @@ when DEBUG do fmt.println(num, " ", cmd)
     switch(cmd){
         case 'A':
             term.row+=i32(num)
-            if term.row > term.height do term.row = term.height
         case 'B':
             term.row-=i32(num)
-            if term.row < 0 do term.row = 0
         case 'C':
             term.col+=i32(num)
-            if term.col > term.width do term.col = term.width
         case 'D':
             term.col-=i32(num)
-            if term.col < 0 do term.col = 0
         case 'f':
             fallthrough
         case 'H':
@@ -448,6 +440,8 @@ t_check_rune :: proc(b : rune, term : ^Term){
     b := b
     switch b{
 
+    case 26:
+    case 23:
     case '\n':
         term.row += 1
         if term.row >= term.height {
@@ -469,6 +463,8 @@ t_check_rune :: proc(b : rune, term : ^Term){
     case 0x07: 
         ;
     case:
+
+        if b == 0 do return
         if term.alt_set == true {
             b = alt_map[b]
         }
@@ -618,73 +614,68 @@ run :: proc(pty: ^pty_t){
                 return
             }else if n > 0{
                 redraw = true
-//                printd(string(buf[:n]))
             }
         }
-        //write shell output to screen
-        if redraw == true {
-            i : int
-            str_ref := string(cstring(&buf[0]))
-            fine_ill_handle_esc := false
-            if strings.contains_rune(str_ref, 0x1b) do fine_ill_handle_esc = true
-                for i = 0 ; i < n ; i+=1 {
+        i : int
+        str_ref := string(cstring(&buf[0]))
+        fine_ill_handle_esc := false
+        if strings.contains_rune(str_ref, 0x1b) do fine_ill_handle_esc = true
+            for i = 0 ; i < n ; i+=1 {
 when DEBUG_BINARY do fmt.printf("%08b\n",buf[i])    
-                    if fine_ill_handle_esc {    
-                    esc_n : int
-
+                if fine_ill_handle_esc {    
+                esc_n : int
 when !SHOW_ANSI_RAW {     
-                        if buf[i] == 0x1B {
-                            esc_n = parse_ansi(buf[i+1:], &term) /// Length of the sequence excluding \0x1b
+                    if buf[i] == 0x1B {
+                        esc_n = parse_ansi(buf[i+1:], &term) /// Length of the sequence excluding \0x1b
 when PRINT_ANSI do print_raw(buf[i:][:esc_n+1])
-                            i += esc_n
-                            continue
-                        }
+                        i += esc_n
+                        continue
+                    }
 }
-                    }
-                cp : rune
-                size : int
-                    b := buf[i]
+                }
+            cp : rune
+            size : int
+                b := buf[i]
 
-                    switch {
-                        case b&0x80 == 0:
-                            // 1-byte ASCII
-                            cp = rune(b)
-                            size = 1
+                switch { // building unicode
+                    case b&0x80 == 0:
+                        // 1-byte ASCII
+                        cp = rune(b)
+                        size = 1
 
-                        case b&0xE0 == 0xC0:
-                            // 2-byte
-                            cp = rune(b&0x1F)<<6 |
-                                 rune(buf[i+1]&0x3F)
-                            size = 2
+                    case b&0xE0 == 0xC0:
+                        // 2-byte
+                        cp = rune(b&0x1F)<<6 |
+                             rune(buf[i+1]&0x3F)
+                        size = 2
 
-                        case b&0xF0 == 0xE0:
-                            // 3-byte
-                            cp = rune(b&0x0F)<<12 |
-                                 rune(buf[i+1]&0x3F)<<6 |
-                                 rune(buf[i+2]&0x3F)
-                            size = 3
+                    case b&0xF0 == 0xE0:
+                        // 3-byte
+                        cp = rune(b&0x0F)<<12 |
+                             rune(buf[i+1]&0x3F)<<6 |
+                             rune(buf[i+2]&0x3F)
+                        size = 3
 
-                        case b&0xF8 == 0xF0:
-                            // 4-byte
-                            cp = rune(b&0x07)<<18 |
-                                 rune(buf[i+1]&0x3F)<<12 |
-                                 rune(buf[i+2]&0x3F)<<6 |
-                                 rune(buf[i+3]&0x3F)
-                            size = 4
+                    case b&0xF8 == 0xF0:
+                        // 4-byte
+                        cp = rune(b&0x07)<<18 |
+                             rune(buf[i+1]&0x3F)<<12 |
+                             rune(buf[i+2]&0x3F)<<6 |
+                             rune(buf[i+3]&0x3F)
+                        size = 4
 
-                        case:
-                            fmt.println("Bad unicode dawg")
-                            cp = 0xFFFD
-                            size = 1
-                    }
+                    case:
+                        fmt.println("Bad unicode dawg")
+                        cp = 0xFFFD
+                        size = 1
+                }
 
-                    i += size-1
-                    t_check_rune(cp,&term)
+                i += size-1
+                t_check_rune(cp,&term)
                 }
                 tdraw(&term)
                 tdraw_cursor(&term)
                 sdl3.UpdateWindowSurface(window)
-            }
         for sdl3.PollEvent(&ev){
             if !t_handle_event(pty,ev, &term) { return }
         }
